@@ -1,0 +1,4 @@
+vk-api==11.9.9
+pygithub==2.3.0
+colorama==0.4.6
+httpx==0.27.0
