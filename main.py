@@ -1,5 +1,3 @@
-if __name__ == "__main__":
-    import work
 from vk_api.longpoll import VkLongPoll, VkEventType
 from threading import Thread
 from importlib import reload
@@ -24,7 +22,10 @@ file_handler = logging.FileHandler(log_file, encoding='utf8')
 file_logger = logging.getLogger("log.txt")
 file_logger.addHandler(file_handler)
 
+
 if __name__ == "__main__":
+    import work
+
     logging.basicConfig(format=FORMAT)
 
     config = work.Config()
@@ -38,12 +39,6 @@ if __name__ == "__main__":
 
     console_logger.info("Успешный запуск бота.")
     tg_bot.send("Успешный запуск бота.")
-    
-    # def invoke(*args, **kwargs):
-        # tg_bot.send("closed with ctrl+enter")
-        # raise KeyboardInterrupt
-
-    # exit = keyboard.register_hotkey("ctrl+enter", invoke)
 
     while True:
         try:
