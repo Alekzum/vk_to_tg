@@ -1,19 +1,23 @@
 from datetime import datetime
-# from termcolor import colored
 from colorama import Fore, Style
 from textwrap import dedent
-import httpx, dotenv, json, os, re, vk_api
+import dotenv
+import httpx
+import time
 import main
+import json
+import sys
+import os
+import re
 
 
 nl = "\n"
 
 
-if not main.colored_text:
-    def colored(text, color):
+def colored(text, color):
+    if not main.colored_text:
         return text
-else:
-    def colored(text, color):
+    else:
         color = color.upper()
         colors = {"LIGHT_BLUE": "LIGHTBLUE_EX"}
         color = colors[color] if color in colors else color
@@ -41,10 +45,9 @@ class Config():
         self.load()
 
     def __str__(self):
-        return f"""<{self.chat_id=}, {self.login=}"""
+        return f"""<{self.chat_id=}>"""
 
     def load(self):
-        # print(os.listdir())
         # Создаём/извлекаем конфигурацию с .env файлом
         self.dot_env_file = ""
         if "config.json" in os.listdir():
@@ -93,7 +96,6 @@ class Config():
 
 
 class Telegram():
-    # __slots__ = ["chat_id", "telegram_api", "disable_notification"]
     def __init__(
         self, chat_id: int, token: str, disable_notification: bool = False
     ):
@@ -109,7 +111,7 @@ class Telegram():
             try:
                 request = self._client.post(*args, **kwargs)
             except:
-                pass
+                time.sleep(1)
             else:
                 done = True
         
@@ -139,29 +141,6 @@ class Telegram():
         ).json()
         return request
 
-    # def photo(self, url: str, push=False) -> dict:
-    #     request = self.post(
-    #         url="sendMessage",
-    #         data={
-    #             "chat_id": self.chat_id,
-    #             # "text": dedent(message),
-    #             "parse_mode": "HTML"
-    #         }
-    #     ).json()
-    #     # self.last_message = l_m = request
-    #     # self.last_chat = l_m.get('result').get('chat').get('id')
-    #     # self.last_msg = l_m.get('result').get('message_id')
-    #     return request
-
-    def edit(self, text: str, chat_id: int | str = None, message_id: int = None) -> dict:
-        if not chat_id: chat_id = self.last_chat
-        if not message_id: message_id = self.last_msg
-        return self.invoke('editMessageText', {'chat_id': chat_id, 'message_id': message_id, 'text': text})
-
-    def invoke(self, method_name: str, data: dict = None) -> dict:
-        request = httpx.post(url=self.telegram_base_url+method_name, data=data).json()
-        return request
-
 
 config = Config()
 tg_bot = Telegram(config.chat_id, config.bot_api)
@@ -170,34 +149,6 @@ tg_bot = Telegram(config.chat_id, config.bot_api)
 user_cache = {}
 group_cache = {}
 chat_cache = {}
-
-# User
-def getUserName(user_id):
-    user = user_cache.get(user_id)
-    if user is None:
-        if user_id < 0:
-            return getGroupName(abs(user_id))
-            user_cache[user_id] = user
-        user = api.users.get(user_ids=user_id)[0]
-    return f"{user['first_name']} {user['last_name']}"
-
-
-# group
-def getGroupName(group_id):
-    group = group_cache.get(group_id)
-    if group is None:
-        group = api.groups.getById(group_id=(abs(group_id)))[0]
-        group_cache[group_id] = group
-    return group['name']
-
-
-# Chat
-def getChatName(chat_id):
-    chat = chat_cache.get(chat_id)
-    if chat is None:
-        chat = api.messages.getChatPreview(peer_id=chat_id)
-        chat_cache[chat_id] = chat
-    return chat['preview']['title']
 
 
 def action_to_string(action: dict):
@@ -241,16 +192,12 @@ def action_to_string(action: dict):
 
 
 def get_url(obj: dict):
-    # print(obj)
     type = obj['type']
-    # print(type, obj)
     try:
         match obj:
             case {"photo": photo} if type == 'photo':
                 sizes = sorted(photo.get('sizes', []), key=lambda x: x['height'], reverse=True)
-                # photo = https://vk.com/video367070989_456239511
                 for photik in sizes:
-                        # print(photik)
                         if photik['type'] in ['w', 'z', 'x']:
                             url = photik['url']
                             break
@@ -291,6 +238,9 @@ def get_url(obj: dict):
             case {'wall': wall} if type == "wall":
                 url = f"https://vk.com/wall{wall['from_id']}_{wall['id']}"
             
+            case {'link': link} if type == "link":
+                url = link['url']
+
             case _:
                 url = "•NaN•"
                 print(obj)
@@ -301,13 +251,12 @@ def get_url(obj: dict):
 
 
 def message_to_str2(message, include_reply=True, include_fwd=True) -> tuple[str, str, bool]:
-    at = datetime.utcfromtimestamp(message.get('date')).strftime('%H:%M:%S')    
+    at = datetime.fromtimestamp(message.get('date')).strftime('%H:%M:%S')    
 
     text = message.get('text')
-    forwarded_msg = nc_forwarded_msg = to_add = ""
+    forwarded_msg = nc_forwarded_msg = ""
 
     to_add = []
-    # print(message)
     if message.get('action'):
         action_str = action_to_string(message['action'])
         to_add.append(action_str)
@@ -371,118 +320,63 @@ def message_to_str2(message, include_reply=True, include_fwd=True) -> tuple[str,
     # print(nc_output)
     return output, nc_output, in_blacklist
 
-def message_to_str(message, include_reply=True, include_fwd=True, _depth=0) -> tuple[str, str, bool]:
-   """Colored output, just output and notify or not"""
-   at = datetime.utcfromtimestamp(message.get('date')).strftime('%H:%M:%S')
-   rply_msg = message.get("reply_message")
-   if rply_msg and include_reply:
-       prev_msg, nc_prev_msg, _ = message_to_str(
-           message=rply_msg,
-           # include_reply=False,
-           # include_fwd=False,
-           _depth=_depth+1
-       )
-
-       prev_msg = f"""{prev_msg}\n{"░"*(_depth+1)}└"""
-       nc_prev_msg = f"""{nc_prev_msg}\n{"░"*(_depth+1)}└"""
-
-   else:
-       nc_prev_msg = prev_msg = ""
-	# "fwd_messages or reply_message"
-	
-   text = message.get('text')
-
-   forwarded_msg = nc_forwarded_msg = ""
-
-   to_add = []
-   # print(message)
-   if message.get('action'):
-       action_str = action_to_string(message.action)
-       to_add.append(action_str)
-       
-   if len(message.get('attachments')) > 0:
-       for attachment in message.get('attachments'):
-           url, type_str = get_url(attachment)
-           to_add.append(f"<a href='{url}'>{type_str}</a>")
-           # else:
-               # to_add.append(f'{type_str} ({url})')
-   to_add = ("\n *" + ", ".join(to_add)) if to_add else ""
-
-   if message.get('action'):
-       action = action_to_string(message.get('action'))
-       text = f"*{action}*"
-
-   if include_fwd and message.get('fwd_messages'):
-       for fwd_message in message['fwd_messages']:
-           forwarded_msg, nc_forwarded_msg, _ = message_to_str(
-               message=fwd_message,
-               # include_reply=False,
-               # include_fwd=False,
-               _depth=_depth+1
-           )
-
-           forwarded_msg = f"""{"░"*(_depth+1)}│{forwarded_msg}"""
-           nc_forwarded_msg = f"""{"░"*(_depth+1)}│{nc_forwarded_msg}"""
-       # nc_forwarded_msg = "\n | " + nc_forwarded_msg
-       # to_add = "\n | " + message_to_str(message.get('fwd_messages')[1], include_reply=False, include_fwd=False)[0]
-
-   nc_prep_time = f"[{at}] "
-   prep_time = colored(nc_prep_time, 'light_blue')
-   mark = ''
-
-   nc_user_ask = getUserName(message['from_id'])
-   user_ask = colored(nc_user_ask, 'red')
-
-   nc_prep_text = ": " + text + to_add
-   prep_text = ": " + colored(text, 'cyan') + to_add
-
-   if message['peer_id'] > 2000000000:
-       nc_conversation = getChatName(message['peer_id'])
-       conversation = colored(nc_conversation, 'green')
-   else:
-       nc_conversation = getUserName(message['peer_id'])
-       conversation = colored(nc_conversation, 'green')
-       mark = "[ЛС] "
-
-   info_conversation = prep_time + mark + f"[{conversation} / {user_ask}]{prep_text}"
-   nc_info_conversation = nc_prep_time + mark + f"[{nc_conversation} / {nc_user_ask}]{nc_prep_text}"
-
-   output = "".join([prev_msg, info_conversation, forwarded_msg])
-   nc_output = "".join([nc_prev_msg, nc_info_conversation, nc_forwarded_msg])
-   in_blacklist = nc_conversation in main.blacklist
-   # if not in_blacklist:
-       # print(message)
-   # print(nc_output)
-   return output, nc_output, in_blacklist
-
 
 def worker(event, api):
+    global getUserName
+    global getGroupName
+    global getChatName
+    # User
+    def getUserName(user_id):
+        global user_cache
+        user = user_cache.get(user_id)
+        if user is None:
+            if user_id < 0:
+                return getGroupName(abs(user_id))
+            user_cache[user_id] = user
+            user = api.users.get(user_ids=user_id)[0]
+        return f"{user['first_name']} {user['last_name']}"
+
+
+    # group
+    def getGroupName(group_id):
+        global group_cache
+        group = group_cache.get(group_id)
+        if group is None:
+            group = api.groups.getById(group_id=(abs(group_id)))[0]
+            group_cache[group_id] = group
+        return group['name']
+
+
+    # Chat
+    def getChatName(chat_id):
+        global chat_cache
+        chat = chat_cache.get(chat_id)
+        if chat is None:
+            chat = api.messages.getChatPreview(peer_id=chat_id)
+            chat_cache[chat_id] = chat
+        return chat['preview']['title']
+    
     globals()['api'] = api
-    try:
-        message = api.messages.getById(message_ids=event.message_id)['items'][0]
+    message = api.messages.getById(message_ids=event.message_id)['items'][0]
 
-        colored_output, output, in_blacklist = message_to_str2(message)
+    colored_output, output, in_blacklist = message_to_str2(message)
 
-        print(output or colored_output)
-        main.file_logger.info(output)
+    print(output or colored_output)
+    main.file_logger.info(output)
 
-        raw = load_raw()
-        
-        if not in_blacklist:
-            # print(locals())
-            if 'reply_message' in message and str(message["reply_message"]["id"]) in raw['messages']:
-                tg_msg = tg_bot.reply(
-                    int(raw['messages'][str(message["reply_message"]["id"])]), 
-                    output
-                )
-            else:
-                tg_msg = tg_bot.send(output)
-            vk_id = event.message_id
-            # print(tg_msg)
-            raw['messages'].update({vk_id: tg_msg['result']['message_id']})
-            save_raw(raw)
-    except Exception:
-        # traceback.print_exc()
-        raise
-        # print("\nPress Enter for reload bot.\n\n")
-        # keyboard.wait("enter")
+    raw = load_raw()
+    
+    if not in_blacklist:
+        if 'reply_message' in message and str(message["reply_message"]["id"]) in raw['messages']:
+            tg_msg = tg_bot.reply(
+                int(raw['messages'][str(message["reply_message"]["id"])]), 
+                output
+            )
+        else:
+            tg_msg = tg_bot.send(output)
+        vk_id = event.message_id
+        raw['messages'].update({vk_id: tg_msg['result']['message_id']})
+        save_raw(raw)
+
+if __name__ == "__main__":
+    Config()
