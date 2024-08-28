@@ -117,9 +117,9 @@ def _handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMe
     print(text)
 
 
-def handle_new_message(event, api, tg):
+def handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMethod, tg: MyTelegram):
     import handler.vk as vk
     if not TYPE_CHECKING: vk = reload(vk)
-    vk._handle_new_message(event, vkApi, tgClient)
+    vk.main._handle_new_message(event, api, tg)
     pair_for_dict = (event.peer_id, event.message_id)
     messages_cache[pair_for_dict] = event.message
