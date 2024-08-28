@@ -13,6 +13,7 @@ CHATS_BLACKLIST = [
 
 re_find_token = re.compile(r"access_token=([^&]+)")
 configIsHere = "config.json" in os.listdir("data")
+configPath = os.sep.join("data", "config.json")
 
 
 @dataclass
@@ -54,7 +55,7 @@ class MyConfig:
         dot_env_file = input('Введите название файла с переменными (по умолчанию ".env". Примеры: ".env" или "env/.env" (без кавычек)):')
         self.dot_env_file = dot_env_file or ".env"
 
-        with open("data\\config.json", "w", encoding="utf-8") as _file:
+        with open(configPath, "w", encoding="utf-8") as _file:
             json.dump({"env_file": dot_env_file}, _file, ensure_ascii=False)
 
         with open(dot_env_file, "w", encoding="utf-8") as _file:
@@ -63,7 +64,7 @@ class MyConfig:
     
     @staticmethod
     def get_config_name() -> str:
-        with open("data\\config.json", encoding="utf-8") as _file:
+        with open(configPath, encoding="utf-8") as _file:
             raw = json.load(_file)
         config = raw['env_file']
         return config
