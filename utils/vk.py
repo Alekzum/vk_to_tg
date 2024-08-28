@@ -2,7 +2,7 @@ from typing import Callable, Any
 from .config import CHATS_BLACKLIST
 from .telegram import MyTelegram
 from . import database
-import vk_api.longpoll
+import vk_api.longpoll  # type: ignore[import-untyped]
 import datetime
 import logging
 import vk_api
@@ -62,42 +62,42 @@ def _get_url(obj: dict) -> tuple[str, str]:
     return result
 
 
-user_cache: dict[int, dict[str, str | Any]] = dict()
-group_cache: dict[int, dict[str, str | Any]] = dict()
-chat_cache: dict[int, dict[str, str | Any]] = dict()
+user_cache: dict[int, str] = dict()
+group_cache: dict[int, str] = dict()
+chat_cache: dict[int, str] = dict()
 conversation_cache: dict[int, tuple[str, str]] = dict()
 
 # User
 def _getUserName(api: vk_api.vk_api.VkApiMethod, user_id: int) -> str:
     global user_cache
-    user = user_cache.get(user_id)
-    if user is None:
+    result = user_cache.get(user_id)
+    if result is None:
         if user_id < 0:
             return _getGroupName(api, abs(user_id))
-        user_new: dict[str, str | Any] = api.users.get(user_ids=user_id)[0]
-        user_cache[user_id] = user = user_new
+        user = api.users.get(user_ids=user_id)[0]
+        user_cache[user_id] = result = " ".join([n for n in [user.get('first_name'), user.get('last_name')] if n])
     
-    return " ".join([n for n in [user.get('first_name'), user.get('last_name')] if n])
+    return result
 
 
 # group
 def _getGroupName(api: vk_api.vk_api.VkApiMethod, group_id: int) -> str:
     global group_cache
-    group = group_cache.get(group_id)
-    if group is None:
+    result = group_cache.get(group_id)
+    if result is None:
         group = api.groups.getById(group_id=(abs(group_id)))[0]
-        group_cache[group_id] = group
-    return group['name']
+        group_cache[group_id] = result = group['name']
+    return result
 
 
 # Chat
 def _getChatName(api: vk_api.vk_api.VkApiMethod, chat_id: int) -> str:
     global chat_cache
-    chat = chat_cache.get(chat_id)
-    if chat is None:
+    result = chat_cache.get(chat_id)
+    if result is None:
         chat = api.messages.getChatPreview(peer_id=chat_id)
-        chat_cache[chat_id] = chat
-    return chat['preview']['title']
+        chat_cache[chat_id] = result = chat['preview']['title']
+    return result
 
 
 def _getConversationInfo(api: vk_api.vk_api.VkApiMethod, message: dict) -> tuple[str, str]:
@@ -154,7 +154,8 @@ def worker(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMethod, tg: MyT
     else:
         msg = tg.send_text(text)
     
-    database.add_pair(msg.id, event.message_id)
+    if hasattr(msg, 'id'):
+        database.add_pair(msg.id, event.message_id)
     print(text)
 
 # def answer_to_message
@@ -167,7 +168,7 @@ def _parse_message(message: dict, api: vk_api.vk_api.VkApiMethod) -> tuple[str, 
 
 
 def _get_text_message(message: dict, api: vk_api.vk_api.VkApiMethod, _depth=0) -> tuple[str, str]:
-    text = message.get('text')
+    text = message.get('text', "")
 
     after_text_things = []
     if message.get('action'):

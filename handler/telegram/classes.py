@@ -1,4 +1,7 @@
-from .my_classes import *
+from utils.my_classes import Message
+from dataclasses import dataclass
+from typing import Optional
+
 from utils.config import Config, MyConfig
 from httpx import Client
 import logging

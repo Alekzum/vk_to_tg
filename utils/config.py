@@ -68,7 +68,7 @@ class MyConfig:
         config = raw['env_file']
         return config
     
-    def update_variable(self, variable_name: Literal["api_id", "api_hash", "bot_token", "chat_id", "access_token", "all"]):
+    def update_variable(self, variable_name: str | Literal["api_id", "api_hash", "bot_token", "chat_id", "access_token", "all"]):
         dot_env_file = self.dot_env_file
         match variable_name:
             case "api_id":

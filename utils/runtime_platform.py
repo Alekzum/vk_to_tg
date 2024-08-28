@@ -2,7 +2,7 @@ import subprocess, logging, venv, sys, os
 
 
 logger = logging.getLogger(__name__)
-VENV_DIR = "venv"
+VENV_DIR = ".venv"
 
 # i know only about two paths xd
 if sys.platform == "linux":
@@ -52,8 +52,11 @@ def start_venv():
     command = [PATH_TO_PYTHON, "main.py", '"IT IS MINECRAFT SERVER CHECK BOT, IF YOU CHECK COMMAND LINE AND SEE THIS!"']
     print(f"Starting main.py with {PATH_TO_PYTHON!r}")
     p = subprocess.Popen(command)
-    returncode = p.wait()
-    exit(returncode)
+    try:
+        returncode = p.wait()
+        exit(returncode)
+    except KeyboardInterrupt:
+        print("Bot is stopped")
 
 
 check_platform()
