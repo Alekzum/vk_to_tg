@@ -1,5 +1,4 @@
 vk-api==11.9.9
-colorama
 httpx
 Pyrogram @ https://github.com/KurimuzonAkuma/pyrogram/archive/dev.zip
 python-dotenv
