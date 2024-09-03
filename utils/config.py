@@ -6,8 +6,8 @@ import re
 import os
 
 
-CHATS_BLACKLIST = [
-    '🚖🚕Такси "Ладья"🚕🚖', 118
+CHATS_BLACKLIST: list[str] = [
+    '🚖🚕Такси "Ладья"🚕🚖'
 ]
 
 
@@ -18,12 +18,6 @@ configPath = os.sep.join(["data", "config.json"])
 
 @dataclass
 class MyConfig:
-    dot_env_file: str
-    """File with "secret" variables (aka .env file)"""
-
-    api_key: str
-    """For telegram bot"""
-
     bot_token: str
     """For telegram bot"""
 
@@ -32,56 +26,31 @@ class MyConfig:
 
     access_token: str
     """For vkontakte"""
+
+    need_update: bool
+    """Do program needs to be updated or not"""
+
+    dot_env_file: str = ".env"
+    """File with "secret" variables (aka .env file)"""
     
     def __init__(self):
-        if not configIsHere:
-            self.create_config()
+        self._entries = ["bot_token", "chat_id", "access_token", "need_update"]
+        self.dot_env_file = ".env"
         
-        self.dot_env_file = MyConfig.get_config_name()
-        
-        self.api_id = dotenv.get_key(self.dot_env_file, "api_id") or self.update_variable("api_id")
-        self.api_hash = dotenv.get_key(self.dot_env_file, "api_hash") or self.update_variable("api_hash")
         self.bot_token = dotenv.get_key(self.dot_env_file, "bot_token") or self.update_variable("bot_token")
         self.chat_id = int(dotenv.get_key(self.dot_env_file, "chat_id") or self.update_variable("chat_id"))
         self.access_token = dotenv.get_key(self.dot_env_file, "access_token") or self.update_variable("access_token")
+        self.need_update = (_t:=dotenv.get_key(self.dot_env_file, "need_update")) and bool(int(_t)) or self.update_variable("need_update")
 
     def __str__(self):
         return f"""<Config {self.chat_id=}"""
 
     def __repr__(self):
-        return f'''utils.classes.Config(dot_env_file={self.dot_env_file!r}, api_id={self.api_id!r}, , api_key={self.api_hash!r}, bot_token={self.bot_token!r}, chat_id={self.chat_id!r}, access_token={self.access_token!r})'''
+        return f'''utils.classes.Config({['{}={}'.format(n, getattr(self, n)) for n in self._entries]})'''
     
-    def create_config(self):
-        dot_env_file = input('Введите название файла с переменными (по умолчанию ".env". Примеры: ".env" или "env/.env" (без кавычек)):')
-        self.dot_env_file = dot_env_file or ".env"
-
-        with open(configPath, "w", encoding="utf-8") as _file:
-            json.dump({"env_file": dot_env_file}, _file, ensure_ascii=False)
-
-        with open(dot_env_file, "w", encoding="utf-8") as _file:
-            _file.writelines("")
-        self.update_variable("all")
-    
-    @staticmethod
-    def get_config_name() -> str:
-        with open(configPath, encoding="utf-8") as _file:
-            raw = json.load(_file)
-        config = raw['env_file']
-        return config
-    
-    def update_variable(self, variable_name: str | Literal["api_id", "api_hash", "bot_token", "chat_id", "access_token", "all"]):
+    def update_variable(self, variable_name: str | Literal["bot_token", "chat_id", "access_token", "need_update", "all"]):
         dot_env_file = self.dot_env_file
-        match variable_name:
-            case "api_id":
-                self.api_id = input("Введите api_id (может быть найден на странице https://t.me/botfather): ")
-                dotenv.set_key(dot_env_file, "api_id", self.api_id)
-                return self.api_id
-            
-            case "api_hash":
-                self.api_hash = input("Введите API_HASH (может быть найден на странице https://t.me/botfather): ")
-                dotenv.set_key(dot_env_file, "API_HASH", self.api_hash)
-                return self.api_hash
-            
+        match variable_name:            
             case "bot_token":
                 self.bot_token = input("Введите токен своего бота (может быть найден у https://t.me/botfather): ")
                 dotenv.set_key(dot_env_file, "bot_token", self.bot_token)
@@ -100,8 +69,16 @@ class MyConfig:
                 self.access_token = (re_find_token.findall(access_token) if not access_token.startswith("vk1.") else [access_token])[0]
                 dotenv.set_key(dot_env_file, "access_token", self.access_token)
                 return self.access_token
+            
+            case "need_update":
+                need_update = ""
+                while need_update.lower() not in ["y", "n"]:
+                    need_update = input("Хотите получать обновления автоматически? (y/n): ").lower()
+                self.need_update = True if need_update == "y" else False
+                dotenv.set_key(dot_env_file, "need_update", str((int(self.need_update))))
+                return self.need_update
 
             case "all":
-                [self.update_variable(v) for v in ("bot_token", "chat_id", "access_token")]
+                [self.update_variable(v) for v in self._entries]
 
 Config = MyConfig()

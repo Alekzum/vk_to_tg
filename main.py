@@ -1,6 +1,6 @@
-from utils import runtime_platform
+from utils import runtime_platform, github
 from utils.config import MyConfig
-
+github.check_local_dir()
 
 if not runtime_platform.in_venv():
     exit(0)
