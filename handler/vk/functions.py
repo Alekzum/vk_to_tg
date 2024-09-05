@@ -179,8 +179,7 @@ def getConversationInfoByChatId(api: vk_api.vk_api.VkApiMethod, peer_id: int) ->
 
 
 def getTextMessage(message: dict, api: vk_api.vk_api.VkApiMethod, only_text: bool = False) -> tuple[str, str]:
-    at = datetime.datetime.fromtimestamp(message.get('date', 0)).strftime('%H:%M:%S')
-    text = message.get('text', "")
+    text = message.get('text', "*нет текста*")
 
     to_add = []
     if (action:=message.get('action')):
@@ -197,19 +196,19 @@ def getTextMessage(message: dict, api: vk_api.vk_api.VkApiMethod, only_text: boo
     if not only_text:
         if (reply_to_message:=message.get("reply_message")):
             rtm = getTextMessage(reply_to_message, api, only_text=True)[0]
-            rtmString = f"С ответом на сообщение: {rtm}"
+            rtmString = f"С ответом на сообщение:\n * {rtm}"
             to_add.append(rtmString)
             del reply_to_message, rtm, rtmString
         
         if (forwardedMessages:=message.get("fwd_messages")):
             fwdMsgs = [getTextMessage(fwdMsg, api, only_text=True)[0] for fwdMsg in forwardedMessages]
-            fwdString = f"С пересланными сообщениями: {'; '.join(fwdMsgs)}"
+            fwdString = f"С пересланными сообщениями:{'\n * '.join([''] + fwdMsgs)}"
             to_add.append(fwdString)
             del forwardedMessages, fwdMsgs, fwdString
     
     to_add_string = "\n *".join(['']+to_add) if to_add else ""
 
-    prep_time = f"[{at}]"
+    prep_time = f"[{datetime.datetime.fromtimestamp(message.get('date', 0)).strftime('%H:%M:%S')}]"
 
     user_ask = getUserName(api, message['from_id'])
 
