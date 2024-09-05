@@ -8,10 +8,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-user_cache: dict[int, str] = dict()
-group_cache: dict[int, str] = dict()
-chat_cache: dict[int, str] = dict()
-conversation_cache: dict[int, tuple[str, str]] = dict()
+user_cache: dict[int, tuple[str, int]] = dict()
+group_cache: dict[int, tuple[str, int]] = dict()
+chat_cache: dict[int, tuple[str, int]] = dict()
+conversation_cache: dict[int, tuple[tuple[str, str], int]] = dict()
 
 
 def action_to_string(action: dict, api: vk_api.vk_api.VkApiMethod) -> str:
@@ -96,33 +96,43 @@ def get_url(obj: dict) -> tuple[str, str]:
 # User
 def getUserName(api: vk_api.vk_api.VkApiMethod, user_id: int) -> str:
     global user_cache
-    result = user_cache.get(user_id)
-    if result is None:
-        if user_id < 0:
-            return getGroupName(api, abs(user_id))
-        user = api.users.get(user_ids=user_id)[0]
-        user_cache[user_id] = result = f"{user['first_name']} {user['last_name']}"
-    return result
+    pair = user_cache.get(user_id)
+    if pair is not None and pair[1] < 5:
+        user_cache[user_id] = pair[0], pair[1]
+        return pair[0]
+    
+    if user_id < 0:
+        return getGroupName(api, abs(user_id))
+    
+    user = api.users.get(user_ids=user_id)[0]
+    user_cache[user_id] = pair = (f"{user['first_name']} {user['last_name']}", 0)
+    return pair[0]
 
 
 # group
 def getGroupName(api: vk_api.vk_api.VkApiMethod, group_id: int) -> str:
     global group_cache
-    result: str | None = group_cache.get(group_id)
-    if result is None:
-        group: dict = api.groups.getById(group_id=(abs(group_id)))[0]
-        group_cache[group_id] = result = group['name']
-    return result
+    pair = group_cache.get(group_id)
+    if pair is not None and pair[1] < 5:
+        group_cache[group_id] = pair[0], pair[1] + 1
+        return pair[0]
+    
+    group: dict = api.groups.getById(group_id=(abs(group_id)))[0]
+    group_cache[group_id] = pair = group['name'], 0
+    return pair[0]
 
 
 # Chat
 def getChatName(api: vk_api.vk_api.VkApiMethod, chat_id: int) -> str:
     global chat_cache
-    result = chat_cache.get(chat_id)
-    if result is None:
-        chat = api.messages.getChatPreview(peer_id=chat_id)
-        chat_cache[chat_id] = result = chat['preview']['title']
-    return result
+    pair = chat_cache.get(chat_id)
+    if pair is not None and pair[1] < 5:
+        chat_cache[chat_id] = pair[0], pair[1]+1
+        return pair[0]
+    
+    chat = api.messages.getChatPreview(peer_id=chat_id)
+    chat_cache[chat_id] = pair = (chat['preview']['title'], 0)
+    return pair[0]
 
 
 def getConversationInfo(api: vk_api.vk_api.VkApiMethod, message: dict) -> tuple[str, str]:
@@ -132,8 +142,9 @@ def getConversationInfo(api: vk_api.vk_api.VkApiMethod, message: dict) -> tuple[
 
     global conversation_cache
     pair = conversation_cache.get(conversation_id)
-    if pair is not None:
-        return pair
+    if pair is not None and pair[1] < 5:
+        conversation_cache[conversation_id] = pair[0], pair[1] + 1
+        return pair[0]
 
     if conversation_id > 2000000000:
         conversation = getChatName(api, conversation_id)
@@ -142,17 +153,19 @@ def getConversationInfo(api: vk_api.vk_api.VkApiMethod, message: dict) -> tuple[
         conversation = getUserName(api, conversation_id)
         mark = "[ЛС] "
     
-    conversation_cache[conversation_id] = (conversation, mark)
-    return conversation, mark
+    conversation_cache[conversation_id] = pair = ((conversation, mark), 0)
+    return pair[0]
 
 
 def getConversationInfoByChatId(api: vk_api.vk_api.VkApiMethod, peer_id: int) -> tuple[str, str]:
+    """Return conversation's name and optional mark "[ЛС]" """
     conversation_id = int(f"2000000{peer_id}")
     
     global conversation_cache
     pair = conversation_cache.get(conversation_id)
-    if pair is not None:
-        return pair
+    if pair is not None and pair[1] < 5:
+        conversation_cache[conversation_id] = pair[0], pair[1] + 1
+        return pair[0]
 
     if conversation_id > 2000000000:
         conversation = getChatName(api, conversation_id)
@@ -161,7 +174,7 @@ def getConversationInfoByChatId(api: vk_api.vk_api.VkApiMethod, peer_id: int) ->
         conversation = getUserName(api, conversation_id)
         mark = "[ЛС] "
     
-    conversation_cache[conversation_id] = (conversation, mark)
+    conversation_cache[conversation_id] = (conversation, mark), 0
     return conversation, mark
 
 
