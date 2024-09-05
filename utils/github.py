@@ -58,11 +58,9 @@ def fetch_local_sha():
 
 def check_local_dir():
     needUpdate = Config.need_update
-    # print(sys.argv)
     if needUpdate and len(sys.argv) == 1:
         statuscode = github_sync(LOCAL_DIR)
         print(f"{statuscode = }. Restarting the program...")
-        # sys.exit(statuscode)
         try:
             run([sys.executable, "main.py", "-restarted"])
         except KeyboardInterrupt:

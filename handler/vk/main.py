@@ -26,31 +26,19 @@ def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegr
         return
     
     if event.type == VkEventType.MESSAGE_NEW:
-        import handler.vk as vk
-        if not TYPE_CHECKING: vk = reload(vk)
-        vk.main.handle_new_message(event, vkApi, tgClient)
-        # handle_new_message(event, vkApi, tgClient)
+        handle_new_message(event, vkApi, tgClient)
     
     elif event.type == VkEventType.USER_TYPING_IN_CHAT:
-        import handler.vk as vk
-        if not TYPE_CHECKING: vk = reload(vk)
-        vk.main.handle_user_typing(event, vkApi, tgClient)
-        # handle_user_typing(event, vkApi, tgClient)
+        handle_user_typing(event, vkApi, tgClient)
     
     elif event.type == VkEventType.MESSAGE_EDIT:
-        import handler.vk as vk
-        if not TYPE_CHECKING: vk = reload(vk)
-        vk.main.handle_message_edit(event, vkApi, tgClient)
-        # handle_message_edit(event, vkApi, tgClient)
+        handle_message_edit(event, vkApi, tgClient)
     
     elif event.type in [VkEventType.READ_ALL_INCOMING_MESSAGES, VkEventType.MESSAGES_COUNTER_UPDATE, VkEventType.MESSAGE_FLAGS_RESET, VkEventType.MESSAGE_FLAGS_SET, 602]:
         pass
     
     else:
-        import handler.vk as vk
-        if not TYPE_CHECKING: vk = reload(vk)
-        vk.main.handle_other_event(event, vkApi, tgClient)
-        # handle_other_event(event, vkApi, tgClient)
+        handle_other_event(event, vkApi, tgClient)
 
 
 def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):   
@@ -106,17 +94,12 @@ def handle_other_event(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClie
         
     event_display_name = event.type.name if hasattr(event.type, 'name') else event.type
     
-    event_all_args = ' | '.join(['event.{}: {}'.format(n, getattr(event, n)) for n in dir(event) if n[0]!='_' and bool(getattr(event, n))])  #  and not hasattr(event, "raw")
-    # logging.info(f"{event.type.name}, {}")
+    event_all_args = ' | '.join(['event.{}: {}'.format(n, getattr(event, n)) for n in dir(event) if n[0]!='_' and bool(getattr(event, n))])
     logger.info(f"{event_display_name}, {from_user=!r}, {in_chat=!r}, | {event_all_args} | ")
 
 
 def _handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMethod, tg: MyTelegram):
     message: dict = api.messages.getById(message_ids=event.message_id)['items'][0]
-
-    # logger.info("\n " + ", ".join
-    #     (["{}: {}".format(n, getattr(message, n)) for n in dir(message) if n[0] != "_"])
-    # )
 
     text, isInBlocklist = funcs.parse_message(message, api)
     logger.info(text)

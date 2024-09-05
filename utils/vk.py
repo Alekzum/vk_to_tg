@@ -158,8 +158,6 @@ def worker(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMethod, tg: MyT
         database.add_pair(msg.id, event.message_id)
     print(text)
 
-# def answer_to_message
-
 def _parse_message(message: dict, api: vk_api.vk_api.VkApiMethod) -> tuple[str, bool]:
     """Return output and chatIsInBlocklist"""
     text, conversation = _message_to_string(message, api)
@@ -186,9 +184,6 @@ def _get_text_message(message: dict, api: vk_api.vk_api.VkApiMethod, _depth=0) -
         fwd_messages_list = [fwd_message_formatter.format(space="░"*(_depth+1), text=fwd_message) for fwd_message in fwd_messages]
         fwd_messages_string = "\n".join(fwd_messages_list)
         after_text_things.append(fwd_messages_string)
-        # for fwd_message in fwd_messages:
-        #     fwd_text = _get_text_message(fwd_message, api, _depth+1)
-        #     forwarded_msg = f"""{"░"*(_depth+1)}│{forwarded_msg}"""
 
 
     elif (fwd_messages := message.get("fwd_messages")) and _depth != 0:
