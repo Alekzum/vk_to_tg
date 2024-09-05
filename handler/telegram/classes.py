@@ -56,7 +56,7 @@ class MyTelegram:
         return result
     
     def send_message(self, text: str, reply_to_message_id: Optional[int]=None) -> Message | Response:
-        response = self._invoke("sendMessage", dict(chat_id=self.chat_id, text=text, parse_mode="HTML"))
+        response = self._invoke("sendMessage", dict(chat_id=self.chat_id, text=text, reply_to_message_id=reply_to_message_id, parse_mode="HTML"))
         if response.ok and (msg:=response.result):
             msg["from_user"] = msg["from"]
             del msg["from"]
@@ -72,7 +72,7 @@ class MyTelegram:
         msg = self.send_message(text)
         return msg
     
-    def reply_text(self, msg_id: int, text: str) -> Message | Response:
+    def reply_text(self, msg_id: int | None, text: str) -> Message | Response:
         msg = self.send_message(text, reply_to_message_id=msg_id)
         return msg
     
