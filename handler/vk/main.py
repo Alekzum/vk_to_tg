@@ -18,23 +18,35 @@ binds_vk_to_tg: dict[int, int] = dict()
 
 
 def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):
-    if getattr(event, "chat_id", None) in CHATS_BLACKLIST:
+    if any([n in CHATS_BLACKLIST for n in [funcs.getConversationInfoByChatId(vkApi, event.peer_id)[0]]]):
         return
     
     if event.type == VkEventType.MESSAGE_NEW:
-        handle_new_message(event, vkApi, tgClient)
+        import handler.vk as vk
+        if not TYPE_CHECKING: vk = reload(vk)
+        vk.main.handle_new_message(event, vkApi, tgClient)
+        # handle_new_message(event, vkApi, tgClient)
     
     elif event.type == VkEventType.USER_TYPING_IN_CHAT:
-        handle_user_typing(event, vkApi, tgClient)
+        import handler.vk as vk
+        if not TYPE_CHECKING: vk = reload(vk)
+        vk.main.handle_user_typing(event, vkApi, tgClient)
+        # handle_user_typing(event, vkApi, tgClient)
     
     elif event.type == VkEventType.MESSAGE_EDIT:
-        handle_message_edit(event, vkApi, tgClient)
+        import handler.vk as vk
+        if not TYPE_CHECKING: vk = reload(vk)
+        vk.main.handle_message_edit(event, vkApi, tgClient)
+        # handle_message_edit(event, vkApi, tgClient)
     
     elif event.type in [VkEventType.READ_ALL_INCOMING_MESSAGES, VkEventType.MESSAGES_COUNTER_UPDATE, VkEventType.MESSAGE_FLAGS_RESET, VkEventType.MESSAGE_FLAGS_SET, 602]:
         pass
     
     else:
-        handle_other_event(event, vkApi, tgClient)
+        import handler.vk as vk
+        if not TYPE_CHECKING: vk = reload(vk)
+        vk.main.handle_other_event(event, vkApi, tgClient)
+        # handle_other_event(event, vkApi, tgClient)
 
 
 def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):
