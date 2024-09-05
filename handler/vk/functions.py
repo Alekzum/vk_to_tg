@@ -13,6 +13,7 @@ group_cache: dict[int, tuple[str, int]] = dict()
 chat_cache: dict[int, tuple[str, int]] = dict()
 conversation_cache: dict[int, tuple[tuple[str, str], int]] = dict()
 
+nl = "\n"
 
 def action_to_string(action: dict, api: vk_api.vk_api.VkApiMethod) -> str:
     translate_dict: dict[str, Callable[[dict, vk_api.vk_api.VkApiMethod], str]] = dict(
@@ -196,13 +197,13 @@ def getTextMessage(message: dict, api: vk_api.vk_api.VkApiMethod, only_text: boo
     if not only_text:
         if (reply_to_message:=message.get("reply_message")):
             rtm = getTextMessage(reply_to_message, api, only_text=True)[0]
-            rtmString = f"С ответом на сообщение:\n * {rtm}"
+            rtmString = f"С ответом на сообщение:\{nl} * {rtm}"
             to_add.append(rtmString)
             del reply_to_message, rtm, rtmString
         
         if (forwardedMessages:=message.get("fwd_messages")):
             fwdMsgs = [getTextMessage(fwdMsg, api, only_text=True)[0] for fwdMsg in forwardedMessages]
-            fwdString = f"С пересланными сообщениями:{'\n * '.join([''] + fwdMsgs)}"
+            fwdString = f"С пересланными сообщениями:{f'{nl} * '.join([''] + fwdMsgs)}"
             to_add.append(fwdString)
             del forwardedMessages, fwdMsgs, fwdString
     

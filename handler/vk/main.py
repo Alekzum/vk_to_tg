@@ -18,6 +18,8 @@ messages_cache: dict[tuple[str, str], str] = dict()
 full_messages_cache: dict[tuple[str, str], dict] = dict()
 binds_vk_to_tg: dict[int, int] = dict()
 
+nl = "\n"
+
 
 def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):
     if any([n in CHATS_BLACKLIST for n in [funcs.getConversationInfoByChatId(vkApi, event.chat_id)[0]]]):
@@ -51,7 +53,7 @@ def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegr
         # handle_other_event(event, vkApi, tgClient)
 
 
-def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):    
+def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):   
     try:
         in_chat, mark = funcs.getConversationInfoByChatId(vkApi, event.chat_id)
     except (vk_api.exceptions.ApiError, AttributeError):
@@ -65,7 +67,7 @@ def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgCli
     fromUser = funcs.getUserName(vkApi, event.user_id)
     print(", ".join(["{}:{}".format(n, getattr(event, n)) for n in dir(event) if n[0] !="_"]))
 
-    string = f"{prep_time} {mark}[{in_chat} / {fromUser}] (ID:{event.message_id}): {event.message}\n * Прошлый текст был {repr(_previous_message) or '*неизвестно*'}"
+    string = f"{prep_time} {mark}[{in_chat} / {fromUser}] (ID:{event.message_id}): {event.message}{nl} * Прошлый текст был {repr(_previous_message) or '*неизвестно*'}"
 
     messages_cache[pair_for_dict] = event.message
     logger.info(string)
@@ -131,7 +133,7 @@ def _handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMe
         binds_vk_to_tg[event.message_id] = msg.id
         add_pair(msg.id, event.message_id)
     else:
-        print(f"Что-то пошло не так при отправке сообщения!\n{msg!r}")
+        print(f"Что-то пошло не так при отправке сообщения!{nl}{msg!r}")
     print(text)
 
 
