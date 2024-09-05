@@ -32,7 +32,7 @@ def github_sync(directory):
     remote_sha = fetch_remove_sha()
     local_sha = fetch_local_sha()
     if remote_sha != local_sha:
-        # check_output(["git", "pull", "origin", BRANCH])
+        check_output(["git", "pull", "origin", BRANCH])
         print("The local repo has been updated")
         return 1
     else:
