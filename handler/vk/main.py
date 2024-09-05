@@ -3,6 +3,7 @@ from utils.my_classes import Message
 from utils.database import get_tg_id, add_pair
 from utils.config import CHATS_BLACKLIST
 from vk_api.longpoll import VkEventType  # type: ignore[import-untyped]
+import datetime
 
 from ..telegram import MyTelegram
 from . import functions as funcs
@@ -14,11 +15,12 @@ from typing import Callable, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 messages_cache: dict[tuple[str, str], str] = dict()
+full_messages_cache: dict[tuple[str, str], dict] = dict()
 binds_vk_to_tg: dict[int, int] = dict()
 
 
 def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):
-    if any([n in CHATS_BLACKLIST for n in [funcs.getConversationInfoByChatId(vkApi, event.peer_id)[0]]]):
+    if any([n in CHATS_BLACKLIST for n in [funcs.getConversationInfoByChatId(vkApi, event.chat_id)[0]]]):
         return
     
     if event.type == VkEventType.MESSAGE_NEW:
@@ -49,27 +51,27 @@ def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegr
         # handle_other_event(event, vkApi, tgClient)
 
 
-def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):
+def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):    
     try:
-        from_user = funcs.getUserName(vkApi, event.user_id) if getattr(event, "user_id", None) else None
-    except vk_api.exceptions.ApiError:
-        from_user = None
-    
-    try:
-        in_chat, _ = funcs.getConversationInfoByChatId(vkApi, event.chat_id)
+        in_chat, mark = funcs.getConversationInfoByChatId(vkApi, event.chat_id)
     except (vk_api.exceptions.ApiError, AttributeError):
-        in_chat = None
+        in_chat, mark = None, None
     
     pair_for_dict = (event.peer_id, event.message_id)
     
     _previous_message = messages_cache.get(pair_for_dict)
     
-    string = f"""In {in_chat!r} message from {from_user!r} (ID:{event.message_id}) edited from {_previous_message!r} to {event.message!r}"""
+    prep_time = f"[{datetime.datetime.fromtimestamp(event.timestamp).strftime('%H:%M:%S')}]"
+    fromUser = funcs.getUserName(vkApi, event.user_id)
+    print(", ".join(["{}:{}".format(n, getattr(event, n)) for n in dir(event) if n[0] !="_"]))
+
+    string = f"{prep_time} {mark}[{in_chat} / {fromUser}] (ID:{event.message_id}): {event.message}\n * Прошлый текст был {repr(_previous_message) or '*неизвестно*'}"
+
     messages_cache[pair_for_dict] = event.message
     logger.info(string)
     
     if (tg_id := get_tg_id(event.message_id)):
-        tgClient.reply_text(int(tg_id), string)
+        tgClient.reply_text(msg_id=int(tg_id), text=string)
     else:
         tgClient.send_text(string)
 
@@ -85,7 +87,7 @@ def handle_user_typing(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClie
     except (vk_api.exceptions.ApiError, AttributeError):
         in_chat = None
     
-    string = f"""In {in_chat!r} user {from_user!r} is typing..."""
+    string = f"""В чате {in_chat!r} пишет {from_user!r}..."""
     logger.info(string)
 
 
@@ -110,14 +112,18 @@ def handle_other_event(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClie
 def _handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMethod, tg: MyTelegram):
     message: dict = api.messages.getById(message_ids=event.message_id)['items'][0]
 
+    # logger.info("\n " + ", ".join
+    #     (["{}: {}".format(n, getattr(message, n)) for n in dir(message) if n[0] != "_"])
+    # )
+
     text, isInBlocklist = funcs.parse_message(message, api)
     logger.info(text)
 
     if isInBlocklist:
         return
 
-    if (tg_id:=message.get('reply_message', {}).get('id')):
-        msg = tg.reply_text(text=text, msg_id=int(tg_id))
+    if (vk_id:=message.get('reply_message', {}).get('id')):
+        msg = tg.reply_text(text=text, msg_id=get_tg_id(vk_id))
     else:
         msg = tg.send_text(text)
     
@@ -125,7 +131,7 @@ def _handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMe
         binds_vk_to_tg[event.message_id] = msg.id
         add_pair(msg.id, event.message_id)
     else:
-        print("Something went wrong with sending messages!")
+        print(f"Что-то пошло не так при отправке сообщения!\n{msg!r}")
     print(text)
 
 
