@@ -61,9 +61,13 @@ def check_local_dir():
     # print(sys.argv)
     if needUpdate and len(sys.argv) == 1:
         statuscode = github_sync(LOCAL_DIR)
-        input(f"{statuscode = }. Press enter to restart the programm.")
+        print(f"{statuscode = }. Restarting the program...")
         # sys.exit(statuscode)
-        run([sys.executable, "main.py", "-restarted"])
+        try:
+            run([sys.executable, "main.py", "-restarted"])
+        except KeyboardInterrupt:
+            pass
+            
         exit()
 
 
