@@ -20,11 +20,6 @@ config = MyConfig()
 logger = logging.getLogger(__name__)
 
 
-def run_func_in_module(moduleName: str, funcName: str):
-    tempModule = __import__(moduleName)
-    getattr(tempModule, funcName, lambda *args, **kwargs: logger.error(f"Didn't found {funcName} in {moduleName}"))
-
-
 def main():
     tgClient = MyTelegram()
     vkClient = vk_api.VkApi(token=config.access_token)
@@ -59,8 +54,8 @@ def listen(vkLongpool: vk_api.longpoll.VkLongPoll, vkApi: vk_api.VkApi, tgClient
         raise
     
     except Exception as ex:
-        ex_str = traceback.format_exc()
-        error_str = ("Ошибка!\n" + "\n".join(ex_str.splitlines()[-10:]))[:4095]
+        ex_str = traceback.format_exc()[-4000:]
+        error_str = "Ошибка!\n" + ex_str
         tgClient.send_text(error_str)
         logger.error(error_str)
         
@@ -72,6 +67,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("Stopping bot...")
+        print("Остановка бота...")
             
     # exit(0)
