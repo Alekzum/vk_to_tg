@@ -22,7 +22,13 @@ nl = "\n"
 
 
 def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):
-    if any([n in CHATS_BLACKLIST for n in [funcs.getConversationInfoByChatId(vkApi, event.chat_id)[0]]]):
+    chatId = getattr(event, "chat_id", None)
+    chat = funcs.getConversationInfoByChatId(vkApi, chatId)[0] if chatId else None
+    
+    if event.type in [VkEventType.READ_ALL_INCOMING_MESSAGES, VkEventType.MESSAGES_COUNTER_UPDATE, VkEventType.MESSAGE_FLAGS_RESET, VkEventType.MESSAGE_FLAGS_SET, 602]:
+        return
+
+    if chat in CHATS_BLACKLIST:
         return
     
     if event.type == VkEventType.MESSAGE_NEW:
@@ -33,9 +39,6 @@ def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegr
     
     elif event.type == VkEventType.MESSAGE_EDIT:
         handle_message_edit(event, vkApi, tgClient)
-    
-    elif event.type in [VkEventType.READ_ALL_INCOMING_MESSAGES, VkEventType.MESSAGES_COUNTER_UPDATE, VkEventType.MESSAGE_FLAGS_RESET, VkEventType.MESSAGE_FLAGS_SET, 602]:
-        pass
     
     else:
         handle_other_event(event, vkApi, tgClient)
