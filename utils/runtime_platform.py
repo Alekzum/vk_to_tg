@@ -19,7 +19,8 @@ PATH_TO_PYTHON = os.sep.join(PYTHON)
 
 
 def in_venv():
-    return sys.prefix != sys.base_prefix
+    inVenv = sys.prefix != sys.base_prefix or '--in-venv' in sys.argv
+    return inVenv
 
 
 def check_platform():
@@ -49,7 +50,7 @@ def install_packages():
 
 
 def start_venv():
-    command = [PATH_TO_PYTHON, "main.py", '"IT IS MINECRAFT SERVER CHECK BOT, IF YOU CHECK COMMAND LINE AND SEE THIS!"']
+    command = [PATH_TO_PYTHON, "main.py", '--in-venv']
     print(f"Starting main.py with {PATH_TO_PYTHON!r}")
     p = subprocess.Popen(command)
     try:

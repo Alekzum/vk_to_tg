@@ -62,23 +62,23 @@ def fetch_local_sha():
 
 def check_local_dir():
     needUpdate = Config.need_update
-    if needUpdate and len(sys.argv) == 1:
+    if needUpdate and "--with-github" not in sys.argv:
         statuscode = github_sync(LOCAL_DIR)
         print(f"{statuscode = }. Restarting the program...")
-        run_with_restarted_tag()
+        run_with_github_tag()
             
         exit(0)
 
 
 def restarted():
-    restarted = len(sys.argv) > 1 and sys.argv[1] == "-restarted"
+    restarted = len(sys.argv) > 1 and "--with-github" not in sys.argv
     if not restarted:
-        run_with_restarted_tag()
+        run_with_github_tag()
     return restarted
 
-def run_with_restarted_tag():
+def run_with_github_tag():
     try:
-        run([sys.executable, "main.py", "-restarted"])
+        run(sys.argv + ["--with-github"])
     except KeyboardInterrupt:
         pass
 
