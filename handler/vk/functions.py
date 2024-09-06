@@ -197,7 +197,7 @@ def getTextMessage(message: dict, api: vk_api.vk_api.VkApiMethod, only_text: boo
     if not only_text:
         if (reply_to_message:=message.get("reply_message")):
             rtm = getTextMessage(reply_to_message, api, only_text=True)[0]
-            rtmString = f"С ответом на сообщение:\{nl} * {rtm}"
+            rtmString = f"С ответом на сообщение:{nl} * {rtm}"
             to_add.append(rtmString)
             del reply_to_message, rtm, rtmString
         
