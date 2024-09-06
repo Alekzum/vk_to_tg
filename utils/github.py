@@ -65,16 +65,22 @@ def check_local_dir():
     if needUpdate and len(sys.argv) == 1:
         statuscode = github_sync(LOCAL_DIR)
         print(f"{statuscode = }. Restarting the program...")
-        try:
-            run([sys.executable, "main.py", "-restarted"])
-        except KeyboardInterrupt:
-            pass
+        run_with_restarted_tag()
             
         exit(0)
 
 
 def restarted():
-    return len(sys.argv) > 1 and sys.argv[1] == "-restarted"
+    restarted = len(sys.argv) > 1 and sys.argv[1] == "-restarted"
+    if not restarted:
+        run_with_restarted_tag()
+    return restarted
+
+def run_with_restarted_tag():
+    try:
+        run([sys.executable, "main.py", "-restarted"])
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
