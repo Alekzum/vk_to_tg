@@ -71,14 +71,14 @@ def check_local_dir():
 
 
 def restarted():
-    restarted = len(sys.argv) > 1 and "--with-github" not in sys.argv
+    restarted = "--with-github" in sys.argv
     if not restarted:
         run_with_github_tag()
     return restarted
 
 def run_with_github_tag():
     try:
-        run(sys.argv + ["--with-github"])
+        run([sys.executable] + sys.argv + ["--with-github"])
     except KeyboardInterrupt:
         pass
 
