@@ -69,5 +69,9 @@ def check_local_dir():
         exit()
 
 
+def restarted():
+    return len(sys.argv) > 1 and sys.argv[1] == "-restarted"
+
+
 if __name__ == "__main__":
     check_local_dir()
