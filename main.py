@@ -2,7 +2,7 @@ from utils import runtime_platform, github
 from utils.config import MyConfig
 github.check_local_dir()
 
-if runtime_platform.in_venv() or not github.restarted():
+if not(runtime_platform.in_venv() and github.restarted()):
     exit(0)
 
 from requests.exceptions import ReadTimeout, ConnectionError  # type: ignore[import-untyped]
