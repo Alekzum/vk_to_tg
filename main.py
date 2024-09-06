@@ -2,8 +2,8 @@ from utils import runtime_platform, github
 from utils.config import MyConfig
 github.check_local_dir()
 
-if not(runtime_platform.in_venv() and github.restarted()):
-    exit(0)
+if not github.restarted():
+    exit(1)
 
 from requests.exceptions import ReadTimeout, ConnectionError  # type: ignore[import-untyped]
 import vk_api.longpoll   # type: ignore[import-untyped]
