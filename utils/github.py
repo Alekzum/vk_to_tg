@@ -14,7 +14,7 @@ else:
 Config = cfg.Config
 
 from urllib.request import urlopen
-from subprocess import check_output, run
+from subprocess import PIPE, run
 import json
 import os
 import sys
@@ -25,6 +25,10 @@ USERNAME = "alekzum"
 REPO = "vk_to_tg"
 BRANCH = "main"
 LOCAL_DIR = "."
+
+
+def check_output(*args, **kwargs):
+    return run(*args, stdout=PIPE, **kwargs).stdout
 
 
 def github_sync(directory):
@@ -66,7 +70,7 @@ def check_local_dir():
         except KeyboardInterrupt:
             pass
             
-        exit()
+        exit(0)
 
 
 def restarted():
