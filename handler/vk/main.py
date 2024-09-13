@@ -58,7 +58,7 @@ def handle_message_edit(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgCli
     fromUser = funcs.getUserName(vkApi, event.user_id)
     print(", ".join(["{}:{}".format(n, getattr(event, n)) for n in dir(event) if n[0] !="_"]))
 
-    string = f"{prep_time} {mark}[{in_chat} / {fromUser}] (ID:{event.message_id}): {event.message}{nl} * Прошлый текст был {repr(_previous_message) or '*неизвестно*'}"
+    string = f"Redacted message {prep_time} {mark}[{in_chat} / {fromUser}] (ID:{event.message_id}): {event.message}{nl} * Прошлый текст был {repr(_previous_message) or '*неизвестно*'}"
 
     messages_cache[pair_for_dict] = event.message
     logger.info(string)
