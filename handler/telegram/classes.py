@@ -2,6 +2,8 @@ from utils.my_classes import Message
 from dataclasses import dataclass
 from typing import Optional
 
+from utils.decorators import repeat_until_complete
+
 from utils.config import Config, MyConfig
 from httpx import Client
 import logging
@@ -49,6 +51,7 @@ class MyTelegram:
         self.client = Client(base_url=f"https://api.telegram.org/bot{Config.bot_token}/")
         self.chat_id = self.config.chat_id
     
+    @repeat_until_complete
     def _invoke(self, path: str, data: dict) -> Response:
         request = self.client.post(path, json=data)
         response = request.json()
