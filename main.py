@@ -45,7 +45,17 @@ def main():
 def listen(vkLongpool: vk_api.longpoll.VkLongPoll, vkApi: vk_api.VkApi, tgClient: MyTelegram):
     try:
         for event in vkLongpool.listen():
-            vk.handle(event, vkApi, tgClient)
+            try:
+                vk.handle(event, vkApi, tgClient)
+
+            except KeyboardInterrupt:
+                raise
+            
+            except Exception as ex:
+                ex_str = traceback.format_exc()[-4000:]
+                error_str = "\n".join(["Ошибка!", ex_str, '', 'Event:', str(event)])
+                tgClient.send_text(error_str)
+                logger.error(error_str)
 
     except (ReadTimeout, ConnectionError):
         pass
@@ -55,10 +65,10 @@ def listen(vkLongpool: vk_api.longpoll.VkLongPoll, vkApi: vk_api.VkApi, tgClient
     
     except Exception as ex:
         ex_str = traceback.format_exc()[-4000:]
-        error_str = "Ошибка!\n" + ex_str
+        error_str = "\n".join(["Ошибка!", ex_str])
         tgClient.send_text(error_str)
         logger.error(error_str)
-        
+    
     return
     
 
