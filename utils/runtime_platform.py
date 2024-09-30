@@ -19,7 +19,6 @@ PATH_TO_PYTHON = os.sep.join(PYTHON)
 
 
 def in_venv():
-    print(f"{sys.prefix=!r}, {sys.base_prefix=!r}")
     inVenv = sys.prefix != sys.base_prefix or '--in-venv' in sys.argv
     return inVenv
 
@@ -59,6 +58,3 @@ def start_venv():
         exit(returncode)
     except KeyboardInterrupt:
         print("Bot is stopped")
-
-
-# check_platform()
