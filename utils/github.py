@@ -80,7 +80,7 @@ def run_with_github_tag():
     try:
         run([sys.executable] + sys.argv + ["--with-github"])
     except KeyboardInterrupt:
-        pass
+        raise
 
 
 if __name__ == "__main__":
