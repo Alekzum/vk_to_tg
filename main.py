@@ -1,6 +1,7 @@
 from utils import runtime_platform, github
 from utils.config import MyConfig
 github.check_local_dir()
+runtime_platform.check_platform()
 
 if not github.restarted() or not runtime_platform.in_venv():
     exit(1)
