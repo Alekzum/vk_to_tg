@@ -19,58 +19,46 @@ import vk_api
 
 config = MyConfig()
 logger = logging.getLogger(__name__)
+WAIT_TIME = 1
 
 
 def main():
     tgClient = MyTelegram()
+    try:
+        _main(tgClient)
+
+    except KeyboardInterrupt:
+        tgClient.stop()
+        logger.info("Бот остановлен.")
+
+
+def _main(tgClient: MyTelegram):
     vkClient = vk_api.VkApi(token=config.access_token)
     
     vkApi = vkClient.get_api()
 
-    vkLongpool = vk_api.longpoll.VkLongPoll(vkClient, wait=5)
+    vkLongpool = vk_api.longpoll.VkLongPoll(vkClient, wait=WAIT_TIME, preload_messages=True)
 
     tgClient.send_text("Бот запущен!")
     logger.info("Бот запущен!")
     
     while True:
-        try:
-            listen(vkLongpool, vkApi, tgClient)
-
-        except KeyboardInterrupt:
-            tgClient.stop()
-            logger.info("Бот остановлен.")
-            raise
-            break
-
-
-def listen(vkLongpool: vk_api.longpoll.VkLongPoll, vkApi: vk_api.VkApi, tgClient: MyTelegram):
-    try:
         for event in vkLongpool.listen():
-            try:
-                vk.handle(event, vkApi, tgClient)
+            handle(event, vkApi, tgClient)
 
-            except KeyboardInterrupt:
-                raise
-            
-            except Exception as ex:
-                ex_str = traceback.format_exc()[-4000:]
-                error_str = "\n".join(["Ошибка!", ex_str, '', 'Event:', str(event)])
-                tgClient.send_text(error_str)
-                logger.error(error_str)
 
-    except (ReadTimeout, ConnectionError):
-        pass
+def handle(event: vk_api.longpoll.Event, vkApi: vk_api.vk_api, tgClient: MyTelegram):
+    try:
+        vk.handle(event, vkApi, tgClient)
 
     except KeyboardInterrupt:
         raise
     
     except Exception as ex:
-        ex_str = traceback.format_exc()[-4000:]
-        error_str = "\n".join(["Ошибка!", ex_str])
-        tgClient.send_text(error_str)
+        ex_str = traceback.format_exc()
+        error_str = "\n".join([f"Ошибка! {ex_str}", f'Event: {event!r}'])
+        tgClient.send_text(error_str[-4090:])
         logger.error(error_str)
-    
-    return
     
 
 if __name__ == "__main__":

@@ -76,11 +76,12 @@ def restarted():
         run_with_github_tag()
     return restarted
 
+
 def run_with_github_tag():
     try:
         run([sys.executable] + sys.argv + ["--with-github"])
     except KeyboardInterrupt:
-        raise
+        exit()
 
 
 if __name__ == "__main__":

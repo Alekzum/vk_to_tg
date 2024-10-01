@@ -1,5 +1,5 @@
 from utils.config import CHATS_BLACKLIST
-from typing import Callable
+from typing import Callable, Any
 import datetime
 import vk_api  # type: ignore[import-untyped]
 
@@ -14,6 +14,7 @@ chat_cache: dict[int, tuple[str, int]] = dict()
 conversation_cache: dict[int, tuple[tuple[str, str], int]] = dict()
 
 nl = "\n"
+
 
 def action_to_string(action: dict, api: vk_api.vk_api.VkApiMethod) -> str:
     translate_dict: dict[str, Callable[[dict, vk_api.vk_api.VkApiMethod], str]] = dict(
@@ -36,54 +37,61 @@ def action_to_string(action: dict, api: vk_api.vk_api.VkApiMethod) -> str:
 
 def get_url(obj: dict) -> tuple[str, str]:
     """Return media's url and this type"""
-    _type = obj['type']
+    _type: str = obj['type']
+    real_obj: dict[str, Any] = obj[_type]
 
-    translate_dict: dict[str, Callable[[dict], str|tuple[str, str]]] = dict(
-        photo = lambda _obj:
+    translate_dict: dict[str, Callable[[], str | tuple[str, str]]] = dict(
+        photo = lambda:
             (
-                [photik['url'] for photik in sorted(_obj[_type].get('sizes', []), key=lambda x: x['height'], reverse=True) if photik['type'] in ['w', 'z', 'x']]
-            or [f"https://vk.com/photo{_obj[_type].get('owner_id', '???')}_{_obj[_type].get('id', '???')}"]
+                [photik['url'] for photik in sorted(real_obj.get('sizes', []), key=lambda x: x['height'], reverse=True) if photik['type'] in ['w', 'z', 'x']]
+            or [f"https://vk.com/photo{real_obj.get('owner_id', '???')}_{real_obj.get('id', '???')}"]
         )[0],
 
-        video = lambda _obj: 
-            _obj[_type]['url'],
+        video = lambda: 
+            real_obj.get(
+                'url', 
+                (real_obj['player'], real_obj['title'])
+            ),
         
-        audio = lambda _obj: 
-            _obj[_type]['url'],
+        audio = lambda: 
+            real_obj['url'],
         
-        doc = lambda _obj: 
-            (_obj[_type]['url'], f"{_obj[_type]['title']} (document)"),
+        doc = lambda: 
+            (real_obj['url'], f"{real_obj['title']} (document)"),
         
-        market = lambda _obj: 
-            f"Артикул: {_obj[_type]['sku']}",
+        market = lambda: 
+            f"Артикул: {real_obj['sku']}",
         
-        market_album = lambda _obj: 
-            f"Название: {_obj[_type]['title']}, id владельца: {_obj[_type]['owner_id']}",
+        market_album = lambda: 
+            f"Название: {real_obj['title']}, id владельца: {real_obj['owner_id']}",
         
-        wall_reply = lambda _obj: 
-            f"№{_obj[_type]['id']} от пользователя №{_obj[_type]['owner_id']}",
+        wall_reply = lambda: 
+            f"№{real_obj['id']} от пользователя №{real_obj['owner_id']}",
         
-        sticker = lambda _obj: 
-            _obj[_type]['images'][-1]['url'],
+        sticker = lambda: 
+            real_obj['images'][-1]['url'],
         
-        gift = lambda _obj: 
-            _obj[_type]['thumb_256'],
+        gift = lambda: 
+            real_obj['thumb_256'],
         
-        audio_message = lambda _obj: 
-            _obj[_type]['link_mp3'],
+        audio_message = lambda: 
+            real_obj['link_mp3'],
         
-        wall = lambda _obj: 
-            f"https://vk.com/wall{_obj[_type]['from_id']}_{_obj[_type]['id']}",
+        wall = lambda: 
+            f"https://vk.com/wall{real_obj['from_id']}_{real_obj['id']}",
         
-        link = lambda _obj: 
-            _obj[_type]['url']
+        link = lambda: 
+            real_obj['url']
         
     )
+    
+    default = (lambda: ("", f"""•Неизвестное вложение {_type!r}•"""))
 
     try:
-        result_str: str | tuple[str, str] = translate_dict.get(_type, lambda _: f"""•Неизвестное вложение "{_type}"•""")(obj)
+        result_str: str | tuple[str, str] = translate_dict.get(_type, default)()
     except KeyError as ex:
-        logger.error(f"Didn't get {ex.args[0]}. dir(obj)")
+        result_str = ("", f"""•Неизвестное вложение {_type!r}•""")
+        logger.error(f"Didn't get {ex.args[0]}. {obj}")
     
     if isinstance(result_str, str):
         result = (result_str, _type)
@@ -180,7 +188,7 @@ def getConversationInfoByChatId(api: vk_api.vk_api.VkApiMethod, peer_id: int) ->
 
 
 def getTextMessage(message: dict, api: vk_api.vk_api.VkApiMethod, only_text: bool = False) -> tuple[str, str]:
-    text = message.get('text', "*нет текста*")
+    text = message.get('text') or "*нет текста*"
 
     to_add = []
     if (action:=message.get('action')):
@@ -217,7 +225,7 @@ def getTextMessage(message: dict, api: vk_api.vk_api.VkApiMethod, only_text: boo
 
     conversation, mark = getConversationInfo(api, message)
 
-    info_conversation = f"{prep_time} {mark}[{conversation} / {user_ask}] (ID:{message['id']}): {prep_text}"
+    info_conversation = f"{prep_time} {mark}[{conversation} / {user_ask}] (ID:{message.get('id', '???')}): {prep_text}"
     return info_conversation, conversation
 
 
