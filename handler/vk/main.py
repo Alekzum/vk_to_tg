@@ -1,5 +1,5 @@
 from importlib import reload
-from utils.my_classes import Message
+from utils.my_classes import Message, ReloadingModule
 from utils.database import get_tg_id, add_pair
 from utils.config import CHATS_BLACKLIST
 from vk_api.longpoll import VkEventType  # type: ignore[import-untyped]
@@ -10,8 +10,7 @@ from . import functions as funcs
 import vk_api.longpoll  # type: ignore[import-untyped]
 import logging
 
-from typing import Callable, TYPE_CHECKING
-
+import handler.vk as vk
 
 logger = logging.getLogger(__name__)
 messages_cache: dict[tuple[str, str], str] = dict()
@@ -19,6 +18,9 @@ full_messages_cache: dict[tuple[str, str], dict] = dict()
 binds_vk_to_tg: dict[int, int] = dict()
 
 nl = "\n"
+
+funcs = ReloadingModule(funcs)
+vk = ReloadingModule(vk)
 
 
 def handle(event: vk_api.longpoll.Event, vkApi: vk_api.VkApi, tgClient: MyTelegram):
@@ -124,8 +126,6 @@ def _handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMe
 
 
 def handle_new_message(event: vk_api.longpoll.Event, api: vk_api.vk_api.VkApiMethod, tg: MyTelegram):
-    import handler.vk as vk
-    if not TYPE_CHECKING: vk = reload(vk)
     vk.main._handle_new_message(event, api, tg)
     pair_for_dict = (event.peer_id, event.message_id)
     messages_cache[pair_for_dict] = event.message

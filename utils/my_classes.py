@@ -1,5 +1,19 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
+from types import ModuleType
+from importlib import reload
+
 from dataclasses import dataclass
+
+
+# omg, dont look at that...
+class ReloadingModule(ModuleType):            
+    """Module which will automatically reload when getting his attributes"""
+    def __init__(self, module: ModuleType):
+        self._module: ModuleType = module
+
+    def __getattr__(self, name: str) -> Any:
+        self._module = reload(self._module)
+        return getattr(self._module, name)
 
 
 @dataclass
