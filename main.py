@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 WAIT_TIME = 1
 
 
+def log(text: str) -> None:
+    import datetime
+    print(f"{str(datetime.datetime.now())[:-3]} - main.py - {text}")
+
+
 def main():
     tgClient = MyTelegram()
     try:
@@ -33,7 +38,7 @@ def main():
     
     except Exception as ex:
         ex_str = traceback.format_exc()
-        error_str = "\n".join([f"Ошибка! {ex_str}", f'Event: {event!r}'])
+        error_str = "\n".join([f"Ошибка! {ex_str}"])
         tgClient.send_text(error_str[-4090:])
         logger.error(error_str)
     
@@ -73,6 +78,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("Остановка бота...")
+        log("Bot is stopped.")
             
     # exit(0)
