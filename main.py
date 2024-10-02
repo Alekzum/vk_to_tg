@@ -30,6 +30,13 @@ def main():
     except KeyboardInterrupt:
         tgClient.stop()
         logger.info("Бот остановлен.")
+    
+    except Exception as ex:
+        ex_str = traceback.format_exc()
+        error_str = "\n".join([f"Ошибка! {ex_str}", f'Event: {event!r}'])
+        tgClient.send_text(error_str[-4090:])
+        logger.error(error_str)
+    
 
 
 def _main(tgClient: MyTelegram):
