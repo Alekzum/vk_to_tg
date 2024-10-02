@@ -28,7 +28,7 @@ def log(text: str) -> None:
 
 
 def send_to_tg(tgClient: MyTelegram, text: str):
-    tgClient.send_text(f"<blockquote expandable>{text[:2000] + "..." + text[-2000:]}</blockquote>")
+    tgClient.send_text(f"<blockquote expandable>{text[:2000] + '...' + text[-2000:]}</blockquote>")
 
 
 def main():
