@@ -19,7 +19,7 @@ import vk_api
 
 config = MyConfig()
 logger = logging.getLogger(__name__)
-WAIT_TIME = 1
+WAIT_TIME = 5
 
 
 def log(text: str) -> None:
@@ -27,24 +27,12 @@ def log(text: str) -> None:
     print(f"{str(datetime.datetime.now())[:-3]} - main.py - {text}")
 
 
+def send_to_tg(tgClient: MyTelegram, text: str):
+    tgClient.send_text(f"<blockquote expandable>{text[:2000] + "..." + text[-2000:]}</blockquote>")
+
+
 def main():
     tgClient = MyTelegram()
-    try:
-        _main(tgClient)
-
-    except KeyboardInterrupt:
-        tgClient.stop()
-        logger.info("Бот остановлен.")
-    
-    except Exception as ex:
-        ex_str = traceback.format_exc()
-        error_str = "\n".join([f"Ошибка! {ex_str}"])
-        tgClient.send_text(error_str[-4090:])
-        logger.error(error_str)
-    
-
-
-def _main(tgClient: MyTelegram):
     vkClient = vk_api.VkApi(token=config.access_token)
     
     vkApi = vkClient.get_api()
@@ -55,8 +43,15 @@ def _main(tgClient: MyTelegram):
     logger.info("Бот запущен!")
     
     while True:
-        for event in vkLongpool.listen():
-            handle(event, vkApi, tgClient)
+        try:
+            [handle(event, vkApi, tgClient) for event in vkLongpool.listen()] 
+    
+        except Exception as ex:
+            ex_str = traceback.format_exc()
+            # error_str = f"Ошибка! {ex_str}"
+            error_str = ex_str
+            send_to_tg(tgClient, error_str)
+            logger.error(error_str + "\nSent to tg")
 
 
 def handle(event: vk_api.longpoll.Event, vkApi: vk_api.vk_api, tgClient: MyTelegram):
@@ -68,8 +63,10 @@ def handle(event: vk_api.longpoll.Event, vkApi: vk_api.vk_api, tgClient: MyTeleg
     
     except Exception as ex:
         ex_str = traceback.format_exc()
-        error_str = "\n".join([f"Ошибка! {ex_str}", f'Event: {event!r}'])
-        tgClient.send_text(error_str[-4090:])
+        # error_str = f"Ошибка! {ex_str}"
+        error_str = ex_str
+        send_to_tg(tgClient, error_str)
+        send_to_tg(tgClient, f'Event: {event!r}')
         logger.error(error_str)
     
 
