@@ -49,8 +49,11 @@ def main():
         except Exception as ex:
             ex_str = traceback.format_exc()
             # error_str = f"Ошибка! {ex_str}"
-            error_str = ex_str
-            send_to_tg(tgClient, error_str)
+            error_str = f"{ex!r}\n{ex_str}"
+            try:
+                send_to_tg(tgClient, error_str)
+            except Exception:
+                pass
             logger.error(error_str + "\nSent to tg")
 
 
