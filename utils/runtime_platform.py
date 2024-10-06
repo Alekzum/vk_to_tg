@@ -1,26 +1,26 @@
 import subprocess, logging, venv, sys, os
 from contextlib import suppress
+import datetime
 
 
 logger = logging.getLogger(__name__)
-VENV_DIR = ".venv"
+VENV_DIRECTORY = ".venv"
 
 # i know only about two paths xd
 if sys.platform == "linux":
-    VENV = [VENV_DIR, "bin"]
-    _PYTHON = ["python"]
+    PYTHON_PARENT_PATH = [VENV_DIRECTORY, "bin"]
+    PYTHON_EXECUTABLE = ["python"]
 
 else:
-    VENV = [VENV_DIR, "Scripts"]
-    _PYTHON = ["python.exe"]
+    PYTHON_PARENT_PATH = [VENV_DIRECTORY, "Scripts"]
+    PYTHON_EXECUTABLE = ["python.exe"]
 
 
-PYTHON = VENV + _PYTHON
-PATH_TO_PYTHON = os.sep.join(PYTHON)
+PATH_TO_PYTHON = PYTHON_PARENT_PATH + PYTHON_EXECUTABLE
+PATH_TO_PYTHON_STR = os.sep.join(PATH_TO_PYTHON)
 
 
 def log(text: str) -> None:
-    import datetime
     print(f"{str(datetime.datetime.now())[:-3]} - utils/runtime_platform.py - {text}")
 
 
@@ -38,8 +38,8 @@ def run_popen(command) -> int:
 
 
 def start_venv():
-    command = [PATH_TO_PYTHON, "main.py", '--in-venv']
-    log(f"Starting main.py with {PATH_TO_PYTHON!r}")
+    command = [PATH_TO_PYTHON_STR, "main.py", '--in-venv']
+    log(f"Starting main.py with {PATH_TO_PYTHON_STR!r}")
     
     returncode = run_popen(command)
     log("Bot is stopped")
@@ -48,9 +48,9 @@ def start_venv():
 
 def check_platform():
     # if venv not exists then create it
-    if not os.path.isfile(PATH_TO_PYTHON):
-        log(f"Creating {VENV_DIR}...")
-        venv.create(VENV_DIR, with_pip=True)
+    if not os.path.isfile(PATH_TO_PYTHON_STR):
+        log(f"Creating {VENV_DIRECTORY}...")
+        venv.create(VENV_DIRECTORY, with_pip=True)
         install_packages()
         start_venv()
     
@@ -60,7 +60,7 @@ def check_platform():
 
 def install_packages():
     custom_requirements = "requirements.txt"
-    command = [PATH_TO_PYTHON, "-m", "pip", "install", "-r", custom_requirements]
+    command = [PATH_TO_PYTHON_STR, "-m", "pip", "install", "-r", custom_requirements]
     log(f"Starting install packages from {custom_requirements!r}")
     
     returncode = run_popen(command)
