@@ -29,6 +29,14 @@ def in_venv():
     return inVenv
 
 
+def run_popen(command) -> int:
+    process = subprocess.Popen(command)
+    with suppress(KeyboardInterrupt):
+        returncode = process.wait()
+        return returncode
+    return -1
+
+
 def start_venv():
     command = [PATH_TO_PYTHON, "main.py", '--in-venv']
     log(f"Starting main.py with {PATH_TO_PYTHON!r}")
@@ -61,3 +69,16 @@ def install_packages():
         exit(returncode)
     log("Packages installed")
     return
+
+
+def install_package(package: str) -> bool:
+    command = [PATH_TO_PYTHON, "-m", "pip", "install", package]
+    print(f"Starting install package {package!r}")
+
+    returncode = run_popen(command)
+    if returncode == 0:
+        print("restart program as usual.")
+        return True
+    
+    logger.error("idk what happened. something goes wrong")
+    return False
