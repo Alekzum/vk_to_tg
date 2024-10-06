@@ -69,16 +69,3 @@ def install_packages():
         exit(returncode)
     log("Packages installed")
     return
-
-
-def install_package(package: str) -> bool:
-    command = [PATH_TO_PYTHON, "-m", "pip", "install", package]
-    print(f"Starting install package {package!r}")
-
-    returncode = run_popen(command)
-    if returncode == 0:
-        print("restart program as usual.")
-        return True
-    
-    logger.error("idk what happened. something goes wrong")
-    return False
