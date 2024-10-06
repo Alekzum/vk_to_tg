@@ -1,4 +1,7 @@
+# i dont know what can be changed in future in these packages
 vk-api==11.9.9
-httpx
-Pyrogram @ https://github.com/KurimuzonAkuma/pyrogram/archive/dev.zip
+
+# from these packages I need only simple functions. If it work - it work :)
 python-dotenv
+dpath
+httpx
