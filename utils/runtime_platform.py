@@ -1,4 +1,5 @@
 import subprocess, logging, venv, sys, os
+from contextlib import suppress
 
 
 logger = logging.getLogger(__name__)
@@ -18,15 +19,29 @@ PYTHON = VENV + _PYTHON
 PATH_TO_PYTHON = os.sep.join(PYTHON)
 
 
+def log(text: str) -> None:
+    import datetime
+    print(f"{str(datetime.datetime.now())[:-3]} - utils/runtime_platform.py - {text}")
+
+
 def in_venv():
     inVenv = sys.prefix != sys.base_prefix or '--in-venv' in sys.argv
     return inVenv
 
 
+def start_venv():
+    command = [PATH_TO_PYTHON, "main.py", '--in-venv']
+    log(f"Starting main.py with {PATH_TO_PYTHON!r}")
+    
+    returncode = run_popen(command)
+    log("Bot is stopped")
+    exit(returncode if returncode != -1 else 0)
+
+
 def check_platform():
     # if venv not exists then create it
     if not os.path.isfile(PATH_TO_PYTHON):
-        print(f"Creating {VENV_DIR}...")
+        log(f"Creating {VENV_DIR}...")
         venv.create(VENV_DIR, with_pip=True)
         install_packages()
         start_venv()
@@ -38,23 +53,11 @@ def check_platform():
 def install_packages():
     custom_requirements = "requirements.txt"
     command = [PATH_TO_PYTHON, "-m", "pip", "install", "-r", custom_requirements]
-    print(f"Starting install packages from {custom_requirements!r}")
-
-    p = subprocess.Popen(command)
-    returncode = p.wait()
+    log(f"Starting install packages from {custom_requirements!r}")
+    
+    returncode = run_popen(command)
     if returncode != 0:
         logger.error("idk what happened. write to me, maybe i can do something: https://a1ekzfame.t.me")
         exit(returncode)
-    print("Packages installed")
+    log("Packages installed")
     return
-
-
-def start_venv():
-    command = [PATH_TO_PYTHON, "main.py", '--in-venv']
-    print(f"Starting main.py with {PATH_TO_PYTHON!r}")
-    p = subprocess.Popen(command)
-    try:
-        returncode = p.wait()
-        exit(returncode)
-    except KeyboardInterrupt:
-        print("Bot is stopped")
