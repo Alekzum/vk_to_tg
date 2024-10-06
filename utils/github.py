@@ -27,6 +27,11 @@ BRANCH = "main"
 LOCAL_DIR = "."
 
 
+def log(text: str) -> None:
+    import datetime
+    print(f"{str(datetime.datetime.now())[:-3]} - utils/github.py - {text}")
+
+
 def check_output(*args, **kwargs):
     return run(*args, stdout=PIPE, **kwargs).stdout
 
@@ -37,10 +42,10 @@ def github_sync(directory):
     local_sha = fetch_local_sha()
     if remote_sha != local_sha:
         check_output(["git", "pull", "origin", BRANCH])
-        print("The local repo has been updated")
+        log("The local repo has been updated")
         return 1
     else:
-        print("The local repo is already up-to-date")
+        log("The local repo is already up-to-date")
         return 0
 
 
@@ -64,7 +69,7 @@ def check_local_dir():
     needUpdate = Config.need_update
     if needUpdate and "--with-github" not in sys.argv:
         statuscode = github_sync(LOCAL_DIR)
-        print(f"{statuscode = }. Restarting the program...")
+        log(f"{statuscode = }. Restarting the program...")
         run_with_github_tag()
             
         exit(0)
