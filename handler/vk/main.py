@@ -19,7 +19,6 @@ binds_vk_to_tg: dict[int, int] = dict()
 
 nl = "\n"
 
-funcs = ReloadingModule(funcs)
 vk = ReloadingModule(vk)
 
 
