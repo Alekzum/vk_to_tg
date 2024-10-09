@@ -1,3 +1,4 @@
+import vk_api.longpoll  # type: ignore[import-untyped]
 from utils import runtime_platform, github
 from utils.config import MyConfig
 github.check_local_dir()
@@ -14,6 +15,7 @@ import handler.vk as vk
 import traceback
 import logging
 import vk_api
+import time
 
 
 config = MyConfig()
@@ -71,7 +73,6 @@ def main():
         mode=sum([
             longpool.VkLongpollMode.GET_ATTACHMENTS, 
             longpool.VkLongpollMode.GET_PTS, 
-            longpool.VkLongpollMode.GET_EXTENDED
         ])
     )
     
@@ -102,17 +103,25 @@ def main():
     save_ts_and_pts(vkLongpool, log=True)
 
 
-def handle(event: longpool.Event, vkApi: vk_api.vk_api, tgClient: MyTelegram):
-    try:
-        vk.handle(event, vkApi, tgClient)
-    
-    except Exception:
-        ex_str = traceback.format_exc()
-        # error_str = f"Ошибка! {ex_str}"
-        error_str = ex_str
+def handle(event: longpool.Event, vkApi: vk_api.vk_api, tgClient: MyTelegram, _retries=5):
+    def handle_exception(ex: Exception):
+        error_str = ''.join(traceback.format_exception(ex))
         send_to_tg(tgClient, error_str)
+        time.sleep(0.5)
         send_to_tg(tgClient, f'Событие: {event!r}')
         logger.error(error_str)
+    
+    try:
+        vk.handle(event, vkApi, tgClient)
+    except vk_api.exceptions.ApiError as ex:
+        if _retries > 0:
+            time.sleep(1)
+            handle(event, vkApi, tgClient, _retries=_retries-1)
+            return
+        handle_exception(ex)
+    
+    except Exception as ex:
+        handle_exception(ex)
     
 
 if __name__ == "__main__":
