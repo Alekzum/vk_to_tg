@@ -15,11 +15,8 @@ LOG_FILE = "log.log"
 LEVEL = logging.INFO
 
 
-customLogger = logging.Logger('customLogger')
-rootLogger = logging.getLogger()
-
-stream_handler = logging.StreamHandler()
-file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
+stream_handler = logging.StreamHandler(); stream_handler.setLevel(LEVEL)
+file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8'); file_handler.setLevel(logging.DEBUG)
 logging.basicConfig(format=FORMAT, level=LEVEL, handlers=[stream_handler, file_handler], style="{")
 
 logger = logging.getLogger(__name__)
