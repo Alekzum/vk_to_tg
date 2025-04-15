@@ -1,6 +1,7 @@
 import subprocess, logging, venv, sys, os
 from contextlib import suppress
 import datetime
+import sys
 
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def run_popen(command) -> int:
 
 
 def start_venv():
-    command = [PATH_TO_PYTHON_STR, "main.py", '--in-venv']
+    command = [PATH_TO_PYTHON_STR, "main.py"] + sys.argv[1:]
     log(f"Starting main.py with {PATH_TO_PYTHON_STR!r}")
     
     returncode = run_popen(command)

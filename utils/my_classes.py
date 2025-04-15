@@ -1,23 +1,9 @@
-from typing import Literal, Optional, Any
-from types import ModuleType
-from importlib import reload
-
+from typing import Literal, Optional
 from dataclasses import dataclass
 
 
-# omg, dont look at that...
-class ReloadingModule(ModuleType):            
-    """Module which will automatically reload when getting his attributes"""
-    def __init__(self, module: ModuleType):
-        self._module: ModuleType = module
-
-    def __getattr__(self, name: str) -> Any:
-        self._module = reload(self._module)
-        return getattr(self._module, name)
-
-
 @dataclass
-class Message:
+class TgMessage:
     id: int
     """Unique message identifier inside this chat"""
 
@@ -201,12 +187,12 @@ class Message:
     message_auto_delete_timer_changed: Optional[dict] = None
     """Real type: MessageAutoDeleteTimerChanged. Service message: auto-delete timer settings changed in the chat"""
 
-    migrate_to_chat_id: Optional[int] = None
+    migrate_to_ADMIN_IDS: Optional[int] = None
     """The group has been migrated to a supergroup with the specified identifier. This number may have more than 32 significant bits and
     some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a
     signed 64-bit integer or double-precision float type are safe for storing this identifier."""
 
-    migrate_from_chat_id: Optional[int] = None
+    migrate_from_ADMIN_IDS: Optional[int] = None
     """The supergroup has been migrated from a group with the specified identifier. This number may have more than 32 significant bits
     and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a
     signed 64-bit integer or double-precision float type are safe for storing this identifier."""

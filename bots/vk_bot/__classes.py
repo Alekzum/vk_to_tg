@@ -1,28 +1,63 @@
-from dataclasses import dataclass
-from typing import Optional, Any
+# dict(
+#     photo=lambda _obj: (
+#         [
+#             photik["url"]
+#             for photik in sorted(
+#                 _obj["photo"].get("sizes", []), key=lambda x: x["height"], reverse=True
+#             )
+#             if photik["type"] in ["w", "z", "x"]
+#         ]
+#         or [
+#             f"https://vk.com/photo{_obj['photo'].get('owner_id', '???')}_{_obj['photo'].get('id', '???')}"
+#         ]
+#     )[0],
+#     video=lambda _obj: _obj["video"]["link"],
+#     audio=lambda _obj: _obj["audio"]["url"],
+#     doc=lambda _obj: (_obj["doc"]["url"], f"{_obj['doc']['title']} (document)"),
+#     market=lambda _obj: f"Артикул: {_obj['market']['sku']}",
+#     market_album=lambda _obj: f"Название: {_obj['market_album']['title']}, id владельца: {_obj['market_album']['owner_id']}",
+#     wall_reply=lambda _obj: f"№{_obj['wall_reply']['id']} от пользователя №{_obj['wall_reply']['owner_id']}",
+#     sticker=lambda _obj: _obj["sticker"]["images"][-1]["url"],
+#     gift=lambda _obj: _obj["gift"]["thumb_256"],
+#     audio_message=lambda _obj: _obj["audio_message"]["link_mp3"],
+#     wall=lambda _obj: f"https://vk.com/wall{_obj['wall']['from_id']}_{_obj['wall']['id']}",
+#     link=lambda _obj: _obj["link"]["url"],
+# )
 
 
-dict(
-    photo=lambda _obj:(
-        [photik['url'] for photik in sorted(_obj['photo'].get('sizes', []), key=lambda x: x['height'], reverse=True) if photik['type'] in ['w', 'z', 'x']]
-        or [f"https://vk.com/photo{_obj['photo'].get('owner_id', '???')}_{_obj['photo'].get('id', '???')}"]
-    )[0],
-    video=lambda _obj: _obj['video']['link'],
-    audio=lambda _obj: _obj['audio']['url'],
-    doc=lambda _obj: (_obj['doc']['url'], f"{_obj['doc']['title']} (document)"),
-    market=lambda _obj: f"Артикул: {_obj['market']['sku']}",
-    market_album=lambda _obj: f"Название: {_obj['market_album']['title']}, id владельца: {_obj['market_album']['owner_id']}",
-    wall_reply=lambda _obj: f"№{_obj['wall_reply']['id']} от пользователя №{_obj['wall_reply']['owner_id']}",
-    sticker=lambda _obj: _obj['sticker']['images'][-1]['url'],
-    gift=lambda _obj: _obj['gift']['thumb_256'],
-    audio_message=lambda _obj: _obj['audio_message']['link_mp3'],
-    wall=lambda _obj: f"https://vk.com/wall{_obj['wall']['from_id']}_{_obj['wall']['id']}",
-    link=lambda _obj: _obj['link']['url']
-)
+'''
+@dataclass
+class Media:
+    type: str
+    access_key: Optional[str] = None
+    photo: Optional["Photo"] = None
+    video: Optional["Video"] = None
+    audio: Optional["Audio"] = None
+    doc: Optional["Document"] = None
+    market: Optional["Market"] = None
+    market_album: Optional["MarketAlbum"] = None
+    wall_reply: Optional["WallReply"] = None
+    sticker: Optional["Sticker"] = None
+    gift: Optional["VkObject"] = None
+    audio_message: Optional["AudioMessage"] = None
+    wall: Optional["Wall"] = None
+    link: Optional["Link"] = None
 
 
 @dataclass
-class PhotoCopy:
+class ShortMedia:
+    id: str
+    type: str
+
+
+@dataclass
+class ShortMedias(list[ShortMedia]):
+    def __init__(self, raw: dict[str, str]):
+        self = [ShortMedia(id=raw[i], type=raw[f"{i}_type"]) for i in raw if not i.endswith("_type")]
+
+
+@dataclass
+class PhotoCopy(Media):
     type: str
     url: str
     width: int
@@ -30,7 +65,7 @@ class PhotoCopy:
 
 
 @dataclass
-class Photo:
+class Photo(Media):
     id: int
     """Идентификатор фотографии"""
     album_id: int
@@ -52,7 +87,8 @@ class Photo:
 
 
 @dataclass
-class Video:
+class Video(Media):
+    ...
     """id
     integer Идентификатор видеозаписи.
 
@@ -221,7 +257,8 @@ class Video:
 
 
 @dataclass
-class Audio:
+class Audio(Media):
+    ...
     """id
 integer Идентификатор аудиозаписи.
 
@@ -291,7 +328,7 @@ integer Идентификатор жанра из списка аудио жа�
 
 
 @dataclass
-class Document:
+class Document(Media):
     """id
 integer Идентификатор файла.
 
@@ -344,7 +381,7 @@ object Информация для предварительного просмо
 
 
 @dataclass
-class Market:
+class Market(Media):
     """id
 integer Идентификатор товара.
 
@@ -415,7 +452,7 @@ object Информация о модерации товара, если тов�
 
 
 @dataclass
-class MarketAlbum:
+class MarketAlbum(Media):
     """id
 integer Идентификатор подборки.
 
@@ -440,7 +477,7 @@ integer Число товаров в подборке."""
 
 
 @dataclass
-class WallReply:
+class WallReply(Media):
     """id
 integer Идентификатор комментария.
 
@@ -483,7 +520,7 @@ object Информация о вложенной ветке комментар�
 
 
 @dataclass
-class AudioMessage:
+class AudioMessage(Media):
     """id
 integer Идентификатор голосового сообщения.
 
@@ -505,7 +542,7 @@ string URL .mp3-файла."""
 
 
 @dataclass
-class Wall:
+class Wall(Media):
     """id
 integer
 
@@ -680,7 +717,7 @@ integer
 
 
 @dataclass
-class Link:
+class Link(Media):
     """url
 string URL ссылки.
 
@@ -711,7 +748,7 @@ string URL страницы с контентом для предпросмот�
 
 
 @dataclass
-class Sticker:
+class Sticker(Media):
     """inner_type
 string Тип, который описывает вариант формата ответа. По умолчанию: "base_sticker_new"
 
@@ -765,18 +802,66 @@ class VkObject:
 
 
 @dataclass
-class Media:
-    type: str
-    access_key: Optional[str]
-    photo: Optional[Photo]
-    video: Optional[Video] 
-    audio: Optional[Audio] 
-    doc: Optional[Document] 
-    market: Optional[Market] 
-    market_album: Optional[MarketAlbum] 
-    wall_reply: Optional[WallReply] 
-    sticker: Optional[Sticker] 
-    gift: Optional[VkObject] 
-    audio_message: Optional[AudioMessage] 
-    wall: Optional[Wall] 
-    link: Optional[Link] 
+class MessageData:
+    attachments: list[Media] | None = None
+    conversation_message_id: int | None = None
+    date: int | None = None
+    from_id: int | None = None
+    fwd_messages: list | None = None
+    id: int | None = None
+    important: bool | None = None
+    is_hidden: bool | None = None
+    out: bool | None = None
+    peer_id: int | None = None
+    random_id: int | None = None
+    text: str | None = None
+    version: int | None = None
+
+
+@dataclass
+class Update(Event):
+    raw: list
+
+    type: VkEventType | int
+    from_user = False
+    from_chat = False
+    from_group = False
+    from_me = False
+    to_me = False
+
+    attachments: list[Media] | ShortMedias = None
+    message_data = None
+    message_id = None
+    timestamp = None
+    peer_id = None
+    flags = None
+    extra = None
+    extra_values = None
+    type_id = None
+
+    # attachments: dict
+    # datetime: str
+    # extra: None
+    # extra_values: dict
+    # flags: int
+    # from_chat: bool
+    # from_group: bool
+    # from_me: bool
+    # from_user: bool
+    # message: str
+    # message_data: dict
+    # message_flags: str
+    # message_id: int
+    # peer_id: int
+    # raw: list
+    # text: str
+    # timestamp: int
+    # title: str
+    # to_me: bool
+    # type: int
+    # type_id: None
+    # user_id: int
+
+    def __post_init__(self, raw: dict):
+        self.attachments = ShortMedias(raw['attachments'])
+'''

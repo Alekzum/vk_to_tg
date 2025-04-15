@@ -1,7 +1,11 @@
-# i dont know what can be changed in future in these packages
-vk-api==11.9.9
+# I dont know what can be changed in future in these packages
+vk-api
 
-# from these packages I need only simple functions. If it work - it work :)
+# I dont care about new functions in these package
+aiogram-sqlite-storage
 python-dotenv
+aiogram
 dpath
 httpx
+
+types-requests
