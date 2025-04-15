@@ -27,17 +27,10 @@ def get_bot() -> tuple[Bot, Dispatcher]:
     return bot, dp
 
 
-async def main_():
+async def main():
     bot, dp = get_bot()
     await dp.start_polling(bot)
 
 
-def main():
-    try:
-        asyncio.run(main_())
-    except KeyboardInterrupt:
-        pass
-
-
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

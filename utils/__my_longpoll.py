@@ -1,30 +1,31 @@
 from utils.interface.vk_messages import get_last_vk_id
-from vkbottle import UserPolling, API
+import vk_api.longpoll as longpoll  # type: ignore[import-untyped]
 from utils.config import Config
 import logging
+import vk_api
 import time
 
 from requests.exceptions import ConnectionError, Timeout
 
 
+# MY_CONFIG = MyConfig(OWNER_ID)
 logger = logging.getLogger(__name__)
 TIMEOUT_EXCEPTIONS = (Timeout, ConnectionError)
 WAIT_TIME = 5
 
 
-async def save_longpoll_info(chat_id: int, vk_longpoll: UserPolling, log=True):
+def save_longpoll_info(chat_id: int, vk_longpoll: longpoll.VkLongPoll, log=True):
     config = Config(chat_id)
-    server = await vk_longpoll.get_server()
-    if ts:=server.get("ts"):
-        config._ts = ts
+    if vk_longpoll.ts:
+        config._ts = vk_longpoll.ts
 
-    if pts:=server.get("pts"):
-        config._pts = pts
+    if vk_longpoll.pts:
+        config._pts = vk_longpoll.pts
     
     config.save_values()
 
 
-async def load_longpoll_info(chat_id: int, vk_longpoll: UserPolling):
+def load_longpoll_info(chat_id: int, vk_longpoll: longpoll.VkLongPoll):
     try:
         config = Config(chat_id)
     except KeyError:
@@ -32,7 +33,6 @@ async def load_longpoll_info(chat_id: int, vk_longpoll: UserPolling):
         pts = 0
     else:
         ts, pts = config._ts, config._pts
-    
     if vk_longpoll.ts and ts is not None:
         vk_longpoll.ts = ts
     if vk_longpoll.pts and pts is not None:
@@ -41,10 +41,10 @@ async def load_longpoll_info(chat_id: int, vk_longpoll: UserPolling):
     vk_longpoll.update_longpoll_server(update_ts=False)
 
 
-def get_longpoll(chat_id: int) -> tuple[API, UserPolling]:
+def get_longpoll(chat_id: int) -> tuple[vk_api.VkApi, longpoll.VkLongPoll]:
     config = Config(chat_id)
     token = config._ACCESS_TOKEN
-    vk_client = UserPolling(token=token)
+    vk_client = vk_api.VkApi(token=token)
     # vk_client = vk_api.VkApi(token=CONFIG.ACCESS_TOKEN)
     while True:
         try:
