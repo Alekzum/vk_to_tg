@@ -5,7 +5,7 @@ from typing import Optional
 from utils.decorators import repeat_until_complete
 
 from utils.config import Config, OWNER_ID
-from httpx import Client
+from httpx import Client, AsyncClient
 import logging
 
 
@@ -43,29 +43,32 @@ class Response:
 @dataclass
 class MyTelegram:
     config: Config
-    client: Client
+    client: AsyncClient
     CHAT_ID: int
 
     def __init__(self, chat_id: int = OWNER_ID):
         self.config = config = Config(chat_id)
-        self.client = Client(
+        self.client = AsyncClient(
             base_url=f"https://api.telegram.org/bot{config._BOT_TOKEN}/"
         )
         self.CHAT_ID = chat_id
 
+    async def _init(self):
+        await self.config.load_values()
+    
     # @repeat_until_complete
-    def _invoke(self, path: str, data: dict) -> Response:
+    async def _invoke(self, path: str, data: dict) -> Response:
         repeat_post = repeat_until_complete(self.client.post)
-        request = repeat_post(path, json=data)
+        request = await repeat_post(path, json=data)
         response = request.json()
         result = Response(response)
         return result
 
-    def send_message(
+    async def send_message(
         self, text: str, reply_to_message_id: Optional[int] = None
     ) -> TgMessage | Response:
-        
-        response = self._invoke(
+
+        response = await self._invoke(
             "sendMessage",
             dict(
                 chat_id=self.CHAT_ID,
@@ -85,14 +88,14 @@ class MyTelegram:
         else:
             return response
 
-    def send_text(self, text) -> TgMessage | Response:
-        msg = self.send_message(text)
+    async def send_text(self, text) -> TgMessage | Response:
+        msg = await self.send_message(text)
         # logger.info(f"{msg=}")
         return msg
 
-    def reply_text(self, msg_id: int | None, text: str) -> TgMessage | Response:
-        msg = self.send_message(text, reply_to_message_id=msg_id)
+    async def reply_text(self, msg_id: int | None, text: str) -> TgMessage | Response:
+        msg = await self.send_message(text, reply_to_message_id=msg_id)
         return msg
 
-    def stop(self):
-        self.send_message("Бот остановлен.")
+    async def stop(self):
+        await self.send_message("Бот остановлен.")

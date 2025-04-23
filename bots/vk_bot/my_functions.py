@@ -1,9 +1,10 @@
 from utils.config import CHATS_BLACKLIST
-from .classes import Message, Attachment
-from .utils import get_message_url
+from .classes import Message, Attachment, ForwardMessage, ReplyMessage
+from .utils import get_message_url, get_message_info
 from typing import Callable, Any
 from vk_api.vk_api import VkApiMethod  # type: ignore
 import logging
+import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -40,13 +41,15 @@ def action_to_string(action: dict, api: VkApiMethod) -> str:
 def get_url(attach: Attachment) -> tuple[str, str]:
     """Return media's url and this type"""
     type_: str = attach.type
-    media: dict[str, Any] = (
-        (attach.media) if isinstance(attach.media, dict) else attach.media.__dict__
-    )
+    media = attach.raw[type_]
+    # media: dict[str, Any] = (
+    #     (attach.media) if isinstance(attach.media, dict) else attach.media.__dict__
+    # )
 
     translate_dict: dict[str, Callable[[], str | tuple[str, str]]] = dict(
         photo=lambda: (
-            [
+            ((x := media.get("orig_photo", {}).get("url")) and [x])
+            or [
                 photo_["url"]
                 for photo_ in sorted(
                     media.get("sizes", []), key=lambda x: x["height"], reverse=True
@@ -76,7 +79,7 @@ def get_url(attach: Attachment) -> tuple[str, str]:
         result_str: str | tuple[str, str] = translate_dict.get(type_, default)()
     except KeyError as ex:
         result_str = ("", f"""•Неизвестное вложение {type_!r}•""")
-        logger.error(f"Didn't get {ex.args[0]}. {attach}")
+        logger.error(f"Didn't get {ex.args[0]}. {attach=}, {media=}")
 
     if isinstance(result_str, str):
         result = (result_str, type_)
@@ -90,7 +93,9 @@ def get_url(attach: Attachment) -> tuple[str, str]:
 def get_dialog_name(api: VkApiMethod, dialog_id: int) -> str:
     for f in (get_user_name, get_chat_name, get_group_name):
         try:
-            return f(api, dialog_id)
+            r = f(api, dialog_id)
+            if r is not None:
+                return r
         except Exception:
             pass
     return "unknown"
@@ -138,10 +143,13 @@ def get_chat_name(api: VkApiMethod, ADMIN_IDS: int) -> str:
     return pair[0]
 
 
-def get_conversation_info(api: VkApiMethod, message: Message) -> tuple[str, str]:
-    conversation_id = message.peer_id
-    if conversation_id is None:
-        return "*None*", ""
+def get_conversation_info(api: VkApiMethod, item: Message | int) -> tuple[str, str]:
+    if isinstance(item, Message):
+        conversation_id = item.peer_id
+    elif isinstance(item, int):
+        conversation_id = item
+    else:
+        raise TypeError(f"Provide only Message or integer, not {item}!")
 
     global conversation_cache
     pair = conversation_cache.get(conversation_id)
@@ -149,40 +157,20 @@ def get_conversation_info(api: VkApiMethod, message: Message) -> tuple[str, str]
         conversation_cache[conversation_id] = pair[0], pair[1] + 1
         return pair[0]
 
+    conversation = get_dialog_name(api, conversation_id)
     if conversation_id > 2000000000:
-        conversation = get_chat_name(api, conversation_id)
+        # conversation = get_chat_name(api, conversation_id)
         mark = ""
     else:
-        conversation = get_user_name(api, conversation_id)
+        # conversation = get_user_name(api, conversation_id)
         mark = "[ЛС] "
 
-    conversation_cache[conversation_id] = pair = ((conversation, mark), 0)
+    conversation_cache[conversation_id] = pair = (conversation, mark), 0
     return pair[0]
 
 
-def get_conversation_info_by_chat_id(api: VkApiMethod, peer_id: int) -> tuple[str, str]:
-    """Return conversation's name and optional mark "[ЛС]" """
-    conversation_id = int(f"2000000{peer_id}")
-
-    global conversation_cache
-    pair = conversation_cache.get(conversation_id)
-    if pair is not None and pair[1] < 5:
-        conversation_cache[conversation_id] = pair[0], pair[1] + 1
-        return pair[0]
-
-    if conversation_id > 2000000000:
-        conversation = get_chat_name(api, conversation_id)
-        mark = ""
-    else:
-        conversation = get_user_name(api, conversation_id)
-        mark = "[ЛС] "
-
-    conversation_cache[conversation_id] = (conversation, mark), 0
-    return conversation, mark
-
-
 def get_text_message(
-    message: Message, api: VkApiMethod, only_text: bool = False
+    message: Message, api: VkApiMethod, text_depth: int
 ) -> tuple[str, str]:
     text = message.text or "*нет текста*"
 
@@ -192,58 +180,121 @@ def get_text_message(
         to_add.append(action_str)
         del action, action_str
 
-    if not only_text:
-        check_attached_messages(message, to_add, api)
-    check_attachments(message, to_add)
+    if text_depth:
+        check_attached_messages(message, to_add, api, text_depth)
+    to_add.extend(check_attachments(message))
 
-    msg_url = get_message_url(message)
-    if not only_text:
+    if text_depth:
+        msg_url = get_message_url(message)
         to_add.append(f'<a href="{msg_url}">сообщение</a>')
     to_add_string = "\n *".join([""] + to_add) if to_add else ""
 
-    msg_time = f"[{message.date:%H:%M:%S}]"
+    # msg_time = f"[{(message.date + datetime.timedelta(hours=4)):%H:%M:%S}]"
+    # conversation, mark = get_conversation_info(api, message)
+    time, string, conversation = get_message_info(message, api)
     msg_text = text + to_add_string
-    conversation, mark = get_conversation_info(api, message)
 
-    user_ask = get_user_name(api, message.from_id)
+    # user_ask = get_user_name(api, message.from_id)
 
-    info_conversation = f"{msg_time} {mark}[{conversation} / {user_ask}]: {msg_text}"
+    # info_conversation = f"{msg_time} {mark}[{conversation} / {user_ask}]: {msg_text}"
+    info_conversation = f"[{time}] {string}: {msg_text}"
     return info_conversation, conversation
 
 
-def check_attachments(message: Message, to_add: list[str]):
+def check_attachments(
+    message: Message | ForwardMessage | ReplyMessage, to_add: list[str] | None = None
+):
+    """return something like ["&lt;a href='url'>something&lt;/a>", "&lt;a href='url'>something2&lt;/a>"]"""
     attachments = message.attachments
-    # logger.debug(f"{attachments=}")
+    to_add = to_add or list()
+    tmp_list = list()
     for attachment in attachments:
         url, type_str = get_url(attachment)
-        to_add.append(f"<a href='{url}'>{type_str}</a>")
+        tmp_list.append(f"<a href='{url}'>{type_str}</a>")
+
+    to_add.extend(tmp_list)
+    return tmp_list
 
 
-def check_attached_messages(message: Message, to_add: list[str], api: VkApiMethod):
+SEP = "\n *"
+
+
+def parse_forwarded_messages(
+    api: VkApiMethod, forwarded_messages: list[ForwardMessage], text_depth=3
+) -> str:
+    fwd_list: list[str] = []
+    for fwd in forwarded_messages:
+        tmp_list_: list[str] = list()
+        attachments = check_attachments(fwd, tmp_list_)
+        if (rtm := fwd.reply_message) and text_depth:
+            fwd_str = parse_replied_message(api, rtm, text_depth=text_depth)
+            attachments.extend(["С ответом на сообщение:"] + fwd_str.split(SEP))
+        elif rtm:
+            attachments.append([f"<a href='{rtm.link}'>Сообщение</a>"])
+
+        if (fwd_msgs := fwd.forwarded_messages) and text_depth:
+            fwd_str = parse_forwarded_messages(api, fwd_msgs, text_depth=text_depth - 1)
+            attachments.extend(["С пересланными сообщениями:"] + fwd_str.split(SEP))
+
+        elif fwd_msgs:
+            attachments.append("С пересланными сообщениями...")
+
+        attachments_str = SEP.join(attachments)
+        user = get_user_name(api, fwd.from_id)
+
+        fwd_list.append(f"{user}: {fwd.text}\n{attachments_str}")
+
+    fwd_string = SEP.join([("\n" + fwd_).replace("\n", SEP) for fwd_ in fwd_list])
+    return fwd_string
+
+
+def parse_replied_message(
+    api: VkApiMethod, reply_to_message: ReplyMessage, text_depth: bool | int = False
+) -> str:
+    reply_message_normal = Message(
+        **api.messages.getById(message_ids=reply_to_message.id)["items"][0]
+    )
+    rtm = parse_message(
+        reply_message_normal,
+        api,
+        text_depth=(0 if text_depth >= 0 else text_depth - 1),
+    )[0]
+    rtm_str = ("\n" + rtm).replace("\n", SEP)
+    return rtm_str
+
+
+def check_attached_messages(
+    message: Message, to_add: list[str], api: VkApiMethod, text_depth: int
+) -> None:
+    if text_depth == 0:
+        return
+
     if reply_to_message := message.reply_message:
-        reply_message_normal = Message(
-            **api.messages.getById(message_ids=reply_to_message.id)["items"][0]
+        rtm_str = parse_replied_message(
+            api,
+            reply_to_message,
+            text_depth=(1 if text_depth >= 0 else text_depth - 1),
         )
-        rtm = parse_message(reply_message_normal, api, only_text=True)[0]
-        rtm_string = f"С ответом на сообщение:{nl} * {rtm}"
+        rtm_string = f"С ответом на сообщение: {rtm_str}"
         to_add.append(rtm_string)
-        del reply_to_message, rtm, rtm_string
 
-    if forwardedMessages := message.forwarded_messages:
-        fwdMsgs = [
-            f"{get_user_name(api, fwd_msg.from_id)}: {fwd_msg.text}"
-            # parse_message(fwdMsg, api, only_text=True)[0]
-            for fwd_msg in forwardedMessages
-        ]
-        fwdString = f"С пересланными сообщениями:{f'{nl} * '.join([''] + fwdMsgs)}"
-        to_add.append(fwdString)
-        del forwardedMessages, fwdMsgs, fwdString
+    if forwarded_messages := message.forwarded_messages:
+        fwd_string = parse_forwarded_messages(
+            api, forwarded_messages, text_depth=text_depth - 1
+        )
+        forwarded_string = f"С пересланными сообщениями: {fwd_string}"
+        to_add.append(forwarded_string)
 
 
-def parse_message(message: Message, api: VkApiMethod, only_text=False) -> tuple[str, bool]:
-    """Return output and chatIsInBlocklist"""
+def parse_message(
+    message: Message,
+    api: VkApiMethod,
+    # text_depth=3,
+    text_depth=-1,
+) -> tuple[str, bool]:
+    """Return output and chat_is_in_blocklist"""
     msg = api.messages.getById(message_ids=message.id)["items"][0]
     message = Message(**msg)
-    text, conversation = get_text_message(message, api, only_text)
-    isInBlocklist = conversation in CHATS_BLACKLIST
-    return text, isInBlocklist
+    text, conversation = get_text_message(message, api, text_depth)
+    is_in_blocklist = conversation in CHATS_BLACKLIST
+    return text, is_in_blocklist

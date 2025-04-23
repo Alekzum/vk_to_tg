@@ -1,5 +1,6 @@
 from functools import wraps
 import logging
+import asyncio
 import time
 
 
@@ -9,7 +10,7 @@ MAX_RETRY_COUNT = 3
 
 def repeat_until_complete(func):
     @wraps(func)
-    def inner(*args, _retries=0, **kwargs):
+    def inner_sync(*args, _retries=0, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as ex:
@@ -17,9 +18,20 @@ def repeat_until_complete(func):
                 raise
             logger.warning(f"{ex!r} #{_retries+1}/{MAX_RETRY_COUNT}")
             time.sleep(1)
-            return inner(*args, **kwargs, _retries=_retries + 1)
+            return inner_sync(*args, **kwargs, _retries=_retries + 1)
+    
+    @wraps(func)
+    async def inner_async(*args, _retries=0, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as ex:
+            if _retries >= MAX_RETRY_COUNT:
+                raise
+            logger.warning(f"{ex!r} #{_retries+1}/{MAX_RETRY_COUNT}")
+            time.sleep(1)
+            return await inner_async(*args, **kwargs, _retries=_retries + 1)
 
-    return inner
+    return inner_async if asyncio.iscoroutinefunction(func) else inner_sync
 
 
 x = 0

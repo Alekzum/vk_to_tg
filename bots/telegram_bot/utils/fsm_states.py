@@ -13,8 +13,9 @@ class EchoStates(StatesGroup):
 
 class BotStates(StatesGroup):
     MENU = State()
-    SETTINGS = State()
+    # SETTINGS = State()
     START_POLLING = State()
+    ANSWER = State()
 
 
 class SettingStates(StatesGroup):

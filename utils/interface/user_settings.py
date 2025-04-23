@@ -1,6 +1,9 @@
 from pydantic import BaseModel, Field
-from typing import Iterable
-import sqlite3
+from typing import Iterable, Any, overload
+import aiosqlite
+import asyncio
+
+# import sqlite3
 import pathlib
 import gzip
 
@@ -22,41 +25,50 @@ _DB_PATH = ["data", "database.db"]
 TABLE_NAME = "UserInfo"
 
 DB_PATH = str(pathlib.Path(*_DB_PATH))
-_BLACKLIST_SEP = "•"
+_BLACKLIST_SEP = "\\•\\"
+_UNSET = object()
 
 
-with sqlite3.connect(DB_PATH) as con:
-    cur = con.cursor()
-    cur.execute(
-        f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME}(
-tg_id INTEGER PRIMARY KEY,
-pooling_state INTEGER,
-vk_token TEXT,
-blacklist BLOB,
-pts INTEGER,
-ts INTEGER
-)"""
-    )
-    con.commit()
+async def init_db():
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME}(
+    tg_id INTEGER PRIMARY KEY,
+    pooling_state INTEGER,
+    vk_token TEXT,
+    blacklist BLOB,
+    pts INTEGER,
+    ts INTEGER
+    )"""
+        )
+        await con.commit()
 
 
-def add_user(tg_id: int, vk_token: str):
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(
+async def add_user(tg_id: int, vk_token: str):
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
             f"""INSERT INTO {TABLE_NAME} (tg_id, pooling_state, vk_token, blacklist) VALUES (?, 0, ?, ?)""",
             (tg_id, vk_token, b""),
         )
-        con.commit()
+        await con.commit()
 
+@overload
+async def get_user[T](tg_id: int, default: T) -> UserInfo | T: ...
+@overload
+async def get_user(tg_id: int, default: Any = _UNSET) -> UserInfo: ...
+async def get_user[T](tg_id: int, default: T | Any = _UNSET) -> UserInfo | T:
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,))
+        result = await cur.fetchone()  # : tuple | None
 
-def get_user(tg_id: int) -> UserInfo:
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,))
-        result: tuple | None = cur.fetchone()
-    if result is None:
+    if result is None and default is _UNSET:
         raise KeyError(f"Didn't found user with id = {tg_id}")
+    elif result is None:
+        return default
+
     k = "tg_id,pooling_state,vk_token,blacklist,pts,ts".split(",")
     d = {k: v for (k, v) in zip(k, result)}
     user = UserInfo(**d)
@@ -64,7 +76,24 @@ def get_user(tg_id: int) -> UserInfo:
     return user
 
 
-def save_user(
+async def get_users() -> list[UserInfo]:
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(f"""SELECT * FROM {TABLE_NAME}""", ())
+        result_: Any = await cur.fetchall()  # : list[tuple]
+    result = tuple(result_) if result_ is not None else list()
+
+    keys = "tg_id,pooling_state,vk_token,blacklist,pts,ts".split(",")
+    raw_list = [
+        {key: value for (key, value) in zip(keys, values)}
+        for values in result
+        if values
+    ]
+    users = [UserInfo(**d) for d in raw_list]
+    return users
+
+
+async def save_user(
     tg_id: int,
     # pooling_state: bool = False,
     # vk_token: str = "",
@@ -73,9 +102,9 @@ def save_user(
     ts: int = 0,
 ):
     item = _srl_blacklist(items or [""])
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
             f"""UPDATE {TABLE_NAME} SET blacklist=?, pts=?, ts=? WHERE tg_id=?""",
             (
                 item,
@@ -84,8 +113,7 @@ def save_user(
                 tg_id,
             ),
         )
-        con.commit()
-    pass
+        await con.commit()
 
 
 def _srl_blacklist(items: Iterable[str]) -> bytes:
@@ -100,85 +128,94 @@ def _drl_blacklist(item: bytes) -> set[str]:
     return set(gzip.decompress(item).decode("utf-8").split(_BLACKLIST_SEP))
 
 
-def set_blacklist(tg_id: int, items: Iterable[str]) -> None:
+async def set_blacklist(tg_id: int, items: Iterable[str]) -> None:
     item = _srl_blacklist(items)
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
             f"""UPDATE {TABLE_NAME} SET blacklist=? WHERE tg_id=?""",
             (
                 item,
                 tg_id,
             ),
         )
-        con.commit()
+        await con.commit()
     return None
 
 
-def get_blacklist(tg_id: int) -> None | set[str]:
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(f"""SELECT blacklist FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,))
-        result_: tuple[bytes] | None = cur.fetchone()
-    result: set[str] | None = (
-        _drl_blacklist(result_[0]) if result_ is not None else None
+async def get_blacklist(tg_id: int) -> None | set[str]:
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"""SELECT blacklist FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,)
+        )
+        result = await cur.fetchone()  # : tuple[bytes] | None
+    to_return: set[str] | None = (
+        _drl_blacklist(result[0]) if result is not None else None
     )
-    return result
+    return to_return
 
 
-def get_token(tg_id: int) -> None | str:
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(f"""SELECT vk_token FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,))
-        _result: tuple[str] | None = cur.fetchone()
-        result: str | None = _result and _result[0]
-    return result
+async def get_token(tg_id: int) -> None | str:
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"""SELECT vk_token FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,)
+        )
+        result = await cur.fetchone()  # : tuple[str] | None
+    to_return_ = tuple(result) if result is not None else None
+    to_return: str | None = to_return_[0] if isinstance(to_return_, tuple) else None
+    return to_return
 
 
-def get_state(tg_id: int) -> None | bool:
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(
+async def get_state(tg_id: int) -> None | bool:
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
             f"""SELECT pooling_state FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,)
         )
-        _result: tuple[int] | None = cur.fetchone()
-        result: bool | None = _result and bool(_result[0])
-    return result
+        result = await cur.fetchone()  # : tuple[int] | None
+    to_return_ = tuple(result) if result is not None else None
+    to_return: bool | None = (
+        bool(to_return_[0]) if isinstance(to_return_, tuple) else None
+    )
+    return to_return
 
 
-def set_state(tg_id: int, pooling_state: bool) -> None:
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(
+async def set_state(tg_id: int, pooling_state: bool) -> None:
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
             f"""UPDATE {TABLE_NAME} SET pooling_state=? WHERE tg_id=?""",
             (
                 int(pooling_state),
                 tg_id,
             ),
         )
-        con.commit()
+        await con.commit()
     return None
 
 
-def get_longpoll_state(tg_id: int) -> tuple[bool, int, int] | None:
-    """returns (pooling_state, pts, ts)"""
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(
+async def get_longpoll_state(tg_id: int) -> tuple[bool, int, int] | None:
+    """returns (pooling_state, pts, ts) or None"""
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
             f"""SELECT pooling_state, pts, ts FROM {TABLE_NAME} WHERE tg_id=?""",
             (tg_id,),
         )
-        result: tuple[bool, int, int] | None = cur.fetchone()
-    return result
+        result = await cur.fetchone()  # : tuple[bool, int, int] | None
+    to_return = tuple(result) if result is not None else None
+    return to_return
 
 
-def set_longpoll_state(
+async def set_longpoll_state(
     tg_id: int, pooling_state: bool, pts: int, ts: int
 ) -> tuple[bool, int, int] | None:
     """returns (pooling_state, pts, ts)"""
-    with sqlite3.connect(DB_PATH) as con:
-        cur = con.cursor()
-        cur.execute(
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
             f"""UPDATE {TABLE_NAME} SET pooling_state=?, pts=?, ts=? WHERE tg_id=?""",
             (
                 int(pooling_state),
@@ -187,17 +224,18 @@ def set_longpoll_state(
                 tg_id,
             ),
         )
-        result: tuple[bool, int, int] | None = cur.fetchone()
-    return result
+        result = await cur.fetchone()  # : tuple[bool, int, int] | None
+    to_return = tuple(result) if result is not None else None
+    return to_return
 
 
-def test():
+async def test():
     UID = -100
     VK_TOKEN = ""
     BLACKLIST1 = "something"
     BLACKLIST2 = ""
-    add_user(UID, "")
+    await add_user(UID, "")
 
 
 if __name__ == "__main__":
-    test()
+    asyncio.run(test())

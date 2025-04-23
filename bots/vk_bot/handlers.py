@@ -1,17 +1,18 @@
 from utils.my_classes import TgMessage
-from utils.interface.vk_messages import get_tg_id, add_pair
+# from utils.interface.vk_messages import get_tg_id, add_pair
 
 from .. import telegram_bot
 from .utils import (
-    get_message_info,
+    # get_message_info,
     get_message_string,
     get_pair_for_dict,
     get_from_user,
     get_in_chat,
     get_from_peer,
-    get_reaction,
+    # get_reaction,
     get_tg_id,
     beautify_print,
+    add_pair,
 )
 from .my_functions import get_dialog_name
 from .classes import Message
@@ -19,10 +20,16 @@ import logging
 
 from vk_api.longpoll import Event, VkEventType, VkMessageFlag
 from vk_api.vk_api import VkApiMethod
-from itertools import accumulate
-from typing import Callable
 import pickle
 import pathlib
+from typing import TypedDict
+
+
+class Caches(TypedDict):
+    messages_cache: dict[tuple[int, int], str]
+    full_messages_cache: dict[tuple[int, int], Event]
+    binds_vk_to_tg: dict[int, int]
+    flags_cache: dict[int, set[VkMessageFlag]]
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +39,7 @@ full_messages_cache: dict[tuple[int, int], Event] = dict()
 binds_vk_to_tg: dict[int, int] = dict()
 flags_cache: dict[int, set[VkMessageFlag]] = dict()
 
-caches = dict(
+caches: Caches = Caches(
     messages_cache=messages_cache,
     full_messages_cache=full_messages_cache,
     binds_vk_to_tg=binds_vk_to_tg,
@@ -40,6 +47,10 @@ caches = dict(
 )
 
 caches_file = pathlib.Path(__file__).parent.joinpath("data", "caches.pkl")
+
+
+def get_caches() -> Caches:
+    return caches
 
 
 def load_caches():
@@ -54,7 +65,7 @@ def load_caches():
     
     global caches
     new_caches = pickle.loads(raw)
-    caches = {i: new_caches[i] for i in caches.copy()}
+    caches = Caches(**{i: new_caches[i] for i in caches.copy()})
     globals().update(caches)
 
 
@@ -62,7 +73,7 @@ def save_caches():
     caches_file.write_bytes(pickle.dumps(caches))
 
 
-def on_message_edit(
+async def on_message_edit(
     event: Event,
     api: VkApiMethod,
     tg_client: telegram_bot.classes.MyTelegram,
@@ -82,7 +93,7 @@ def on_message_edit(
     if isInBlocklist:
         return
 
-    time, msg_info = get_message_info(event, api)
+    # time, msg_info, _ = get_message_info(event, api)
     _previous_message = messages_cache.get(pair_for_dict) if pair_for_dict else None
     # string = f"Redacted message {time} {msg_info}: {event.message}\n * Previous message was {repr(_previous_message) or '*неизвестно*'}"
     string = f"Redacted message {text}\n * Previous message was {_previous_message or '*unknown*'}"
@@ -91,13 +102,13 @@ def on_message_edit(
 
     logger.info(string)
 
-    if event.message_id and (tg_id := get_tg_id(chat_id, event.message_id)):
-        tg_client.reply_text(msg_id=int(tg_id), text=string)
+    if event.message_id and (tg_id := await get_tg_id(chat_id, event.message_id)):
+        await tg_client.reply_text(msg_id=int(tg_id), text=string)
     else:
-        tg_client.send_text(string)
+        await tg_client.send_text(string)
 
 
-def on_message_new(
+async def on_message_new(
     event: Event,
     api: VkApiMethod,
     tg_client: telegram_bot.classes.MyTelegram,
@@ -107,8 +118,10 @@ def on_message_new(
 ):
     # _handle_new_message(event, api, tg)
     chat_id = tg_client.CHAT_ID
+    # assert isinstance(event.message_id, int)
 
-    flags_cache[event.message_id] = event.flags
+    flags_cache[event.message_id] = event.flags  # type: ignore[reportArgumentType]
+    # vk_api < vkbottle. maybe at one great day...
 
     text, isInBlocklist = get_message_string(event, api)
 
@@ -124,19 +137,19 @@ def on_message_new(
         return
 
     if vk_id := getattr(event, "reply_message", {}).get("id"):
-        msg = tg_client.reply_text(text=text, msg_id=get_tg_id(chat_id, vk_id))
+        msg = await tg_client.reply_text(text=text, msg_id=await get_tg_id(chat_id, vk_id))
     else:
-        msg = tg_client.send_text(text)
+        msg = await tg_client.send_text(text)
 
     if isinstance(msg, TgMessage) and event.message_id:
         binds_vk_to_tg[event.message_id] = msg.id
-        add_pair(msg.id, chat_id, event.message_id)
+        await add_pair(msg.id, chat_id, event.message_id)
 
     elif event.message_id:
         logger.warning(f"{msg!r}")
 
 
-def on_message_read(
+async def on_message_read(
     event: Event,
     api: VkApiMethod,
     tg_client: telegram_bot.classes.MyTelegram,
@@ -150,13 +163,13 @@ def on_message_read(
 
     logger.info(string)
 
-    if event.message_id and (tg_id := get_tg_id(chat_id, event.message_id)):
-        tg_client.reply_text(msg_id=int(tg_id), text=string)
+    if event.message_id and (tg_id := await get_tg_id(chat_id, event.message_id)):
+        await tg_client.reply_text(msg_id=int(tg_id), text=string)
     else:
-        tg_client.send_text(string)
+        await tg_client.send_text(string)
 
 
-def on_message_read_self(
+async def on_message_read_self(
     event: Event,
     api: VkApiMethod,
     tg_client: telegram_bot.classes.MyTelegram,
@@ -174,13 +187,13 @@ def on_message_read_self(
 
     logger.info(string)
 
-    if event.message_id and (tg_id := get_tg_id(chat_id, event.message_id)):
-        tg_client.reply_text(msg_id=int(tg_id), text=string)
+    if event.message_id and (tg_id := await get_tg_id(chat_id, event.message_id)):
+        await tg_client.reply_text(msg_id=int(tg_id), text=string)
     else:
-        tg_client.send_text(string)
+        await tg_client.send_text(string)
 
 
-def on_message_react(
+async def on_message_react(
     event: Event,
     api: VkApiMethod,
     tg_client: telegram_bot.classes.MyTelegram,
@@ -194,13 +207,13 @@ def on_message_react(
 
     logger.info(string)
 
-    if event.message_id and (tg_id := get_tg_id(chat_id, event.message_id)):
-        tg_client.reply_text(msg_id=int(tg_id), text=string)
+    if event.message_id and (tg_id := await get_tg_id(chat_id, event.message_id)):
+        await tg_client.reply_text(msg_id=int(tg_id), text=string)
     else:
-        tg_client.send_text(string)
+        await tg_client.send_text(string)
 
 
-def on_message_type(
+async def on_message_type(
     event: Event,
     api: VkApiMethod,
     tg_client: telegram_bot.classes.MyTelegram,
@@ -216,15 +229,15 @@ def on_message_type(
     logger.info(string)
 
 
-def on_update_counter(
+async def on_update_counter(
     event: Event, api: VkApiMethod, tg_client: telegram_bot.classes.MyTelegram
 ):
     string = f"Unread messages count: {event.count}"  # type: ignore[reportAttributeAccessIssue]
     # because it's always integer
-    tg_client.send_text(string)
+    await tg_client.send_text(string)
 
 
-def on_flag_interacted(
+async def on_flag_interacted(
     event: Event, api: VkApiMethod, tg_client: telegram_bot.classes.MyTelegram
 ):
     assert event.message_id, "wtf - event with message's flag, but message_id is none"
@@ -257,14 +270,14 @@ def on_flag_interacted(
 
     logger.info(string)
 
-    if event.message_id and (tg_id := get_tg_id(chat_id, event.message_id)):
-        tg_client.reply_text(msg_id=int(tg_id), text=string)
+    if event.message_id and (tg_id := await get_tg_id(chat_id, event.message_id)):
+        await tg_client.reply_text(msg_id=int(tg_id), text=string)
     else:
-        tg_client.send_text(string)
-    # tg_client.send_text(string)
+        await tg_client.send_text(string)
+    # await tg_client.send_text(string)
 
 
-def on_other_event(
+async def on_other_event(
     event: Event,
     api: VkApiMethod,
     tg_client: telegram_bot.classes.MyTelegram,

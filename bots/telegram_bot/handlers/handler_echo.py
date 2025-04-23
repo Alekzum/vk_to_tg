@@ -1,13 +1,13 @@
 from aiogram import Router
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message
+from aiogram.types import Message, ReplyParameters
 from aiogram_dialog import Dialog, Window, DialogManager, StartMode, ShowMode
 from aiogram_dialog.widgets.text import Const
 from aiogram_dialog.widgets.kbd import Next, Back, Row, Cancel
 from aiogram_dialog.widgets.input import MessageInput
 
 from aiogram_dialog.api.exceptions import NoContextError
-from bots.telegram_bot.utils.fsm_states import BotStates, EchoStates
+from ..utils.fsm_states import BotStates, EchoStates
 import logging
 
 
@@ -16,8 +16,16 @@ rt = Router()
 
 
 async def echo_action(msg: Message, _, dialog_manager: DialogManager):
+    dialog_manager.show_mode = ShowMode.NO_UPDATE
+    await msg.copy_to(
+        msg.chat.id,
+        reply_parameters=ReplyParameters(
+            message_id=msg.message_id,
+            chat_id=msg.chat.id,
+            allow_sending_without_reply=True,
+        ),
+    )
     dialog_manager.show_mode = ShowMode.EDIT
-    await msg.copy_to(msg.chat.id)
 
 
 common_dialog = Dialog(
@@ -37,16 +45,16 @@ common_dialog = Dialog(
 )
 
 
-# @rt.message(StateFilter(None), Command("echo"))
-# async def cmd_start(_: Message, dialog_manager: DialogManager):
-#     try:
-#         dialog_manager.current_context()
-#     except NoContextError:
-#         await dialog_manager.start(
-#             BotStates.MENU,
-#             mode=StartMode.,
-#             show_mode=ShowMode.AUTO,
-#         )
+@rt.message(StateFilter(None), Command("echo"))
+async def cmd_start(_: Message, dialog_manager: DialogManager):
+    try:
+        dialog_manager.current_context()
+    except NoContextError:
+        await dialog_manager.start(
+            BotStates.MENU,
+            mode=StartMode.NEW_STACK,
+            show_mode=ShowMode.AUTO,
+        )
 
 
 # @rt.message(~StateFilter(None), Command("cancel"))

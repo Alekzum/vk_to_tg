@@ -4,6 +4,7 @@ from utils.config import OWNER_ID
 from utils.my_exceptions import handle_exception
 import threading
 import logging
+import asyncio
 
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,9 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     logger.info("Запуск бота...")
     try:
-        vk_bot_main(OWNER_ID)
+        # asyncio.run(tg_bot_main())
+        asyncio.run(vk_bot_main(OWNER_ID))
+        # vk_bot_main(OWNER_ID)
         # thread1 = threading.Thread(target=vk_bot_main, name=f"retranslator for id {OWNER_ID}", args=(OWNER_ID,))
         # thread2 = threading.Thread(target=tg_bot_main, name=f"telegram bot", args=())
         # main(OWNER_ID)

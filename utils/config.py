@@ -14,6 +14,9 @@ import re
 from .interface.user_settings import DB_PATH, get_user, save_user
 import sqlite3
 
+from functools import wraps
+import asyncio
+
 
 CHATS_BLACKLIST: list[str] = ['🚖🚕Такси "Ладья"🚕🚖']
 config_path = pathlib.Path("data", "config.json")
@@ -22,12 +25,19 @@ config_path = pathlib.Path("data", "config.json")
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 _DEFAULT = object()
-OWNER_ID = int(dotenv.get_key(".env", "CHAT_ID") or dotenv.set_key(".env", "CHAT_ID", input("Введите ваш ID в телеграм (https://t.me/my_id_bot в помощь): "))[2])
+OWNER_ID = int(
+    dotenv.get_key(".env", "CHAT_ID")
+    or dotenv.set_key(
+        ".env",
+        "CHAT_ID",
+        input("Введите ваш ID в телеграм (https://t.me/my_id_bot в помощь): "),
+    )[2]
+)
 
 
 ENTRIES = (
     "_BOT_TOKEN",
-    "ADMIN_IDS",
+    "_ADMIN_IDS",
 )
 ENTIRES4FUNCS = Literal[
     "BOT_TOKEN",
@@ -37,9 +47,33 @@ ENTIRES4FUNCS = Literal[
 UNSET = object()
 
 
+def setup_thing(self: "Config"):
+    def check():
+        nonlocal self
+        if not self._is_loaded:
+            raise RuntimeError(
+                f"Need to {type(self).__name__}.load_values() before using this function!"
+            )
+
+    def check_for_init(func):
+        @wraps(func)
+        def inner_sync(*args, **kwargs):
+            check()
+            return func(*args, **kwargs)
+
+        @wraps(func)
+        async def inner_async(*args, **kwargs):
+            check()
+            return await func(*args, **kwargs)
+
+        return inner_async if asyncio.iscoroutinefunction(func) else inner_sync
+    return check_for_init
+
+
 @dataclass
 class Config:
     """If didn't found user with selected tg_id, it'll raise KeyError"""
+
     _BOT_TOKEN: str
     """For telegram bot"""
 
@@ -67,28 +101,35 @@ class Config:
         self._ADMIN_IDS = self.get_variable("ADMIN_IDS")
         self._chat_id = chat_id
         self._connector = sqlite3.connect(DB_PATH)
-        self.load_values()
+
+        self._is_loaded = False
+        # self.load_values()
+
+    def __post_init__(self):
+        thing = setup_thing(self)
+        self.save_values = thing(self.save_values)
 
     def __str__(self):
         return f"""<Config {self._ADMIN_IDS=}"""
 
     def __repr__(self):
         return f"""utils.classes.Config({['{}={}'.format(n, getattr(self, n)) for n in self._entries]})"""
-    
+
     def __del__(self):
         self._connector.close()
 
-    def save_values(self):
-        save_user(self._chat_id, self._blacklist, self._pts, self._ts)
+    async def save_values(self):
+        await save_user(self._chat_id, self._blacklist, self._pts, self._ts)
         ...
 
-    def load_values(self):
-        user_info = get_user(self._chat_id)
+    async def load_values(self):
+        user_info = await get_user(self._chat_id)
         self._blacklist = user_info.blacklist
         self._ACCESS_TOKEN = user_info.vk_token
         self.POLLING_STATE = user_info.pooling_state
         self._pts = user_info.pts
         self._ts = user_info.ts
+        return self
 
     @overload
     def get_variable(self, variable_name: Literal["ADMIN_IDS"]) -> list[int]: ...
@@ -116,9 +157,7 @@ class Config:
                 return self.update_variable("ADMIN_IDS")
 
             case _:
-                raise KeyError(
-                    'Need one of these values: "BOT_TOKEN", "ADMIN_IDS"'
-                )
+                raise KeyError('Need one of these values: "BOT_TOKEN", "ADMIN_IDS"')
 
     @overload
     def update_variable(self, variable_name: Literal["ADMIN_IDS"]) -> list[int]: ...

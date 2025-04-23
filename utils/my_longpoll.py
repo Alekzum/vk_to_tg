@@ -14,20 +14,23 @@ TIMEOUT_EXCEPTIONS = (Timeout, ConnectionError)
 WAIT_TIME = 5
 
 
-def save_longpoll_info(chat_id: int, vk_longpoll: longpoll.VkLongPoll, log=True):
+async def save_longpoll_info(chat_id: int, vk_longpoll: longpoll.VkLongPoll, log=True):
     config = Config(chat_id)
+    await config.load_values()
+    
     if vk_longpoll.ts:
         config._ts = vk_longpoll.ts
 
     if vk_longpoll.pts:
         config._pts = vk_longpoll.pts
     
-    config.save_values()
+    await config.save_values()
 
 
-def load_longpoll_info(chat_id: int, vk_longpoll: longpoll.VkLongPoll):
+async def load_longpoll_info(chat_id: int, vk_longpoll: longpoll.VkLongPoll):
     try:
         config = Config(chat_id)
+        await config.load_values()
     except KeyError:
         ts = 0
         pts = 0
@@ -41,8 +44,9 @@ def load_longpoll_info(chat_id: int, vk_longpoll: longpoll.VkLongPoll):
     vk_longpoll.update_longpoll_server(update_ts=False)
 
 
-def get_longpoll(chat_id: int) -> tuple[vk_api.VkApi, longpoll.VkLongPoll]:
+async def get_client_and_longpoll(chat_id: int) -> tuple[vk_api.VkApi, longpoll.VkLongPoll]:
     config = Config(chat_id)
+    await config.load_values()
     token = config._ACCESS_TOKEN
     vk_client = vk_api.VkApi(token=token)
     # vk_client = vk_api.VkApi(token=CONFIG.ACCESS_TOKEN)
@@ -53,8 +57,8 @@ def get_longpoll(chat_id: int) -> tuple[vk_api.VkApi, longpoll.VkLongPoll]:
                 wait=WAIT_TIME,
                 preload_messages=True,
                 mode=longpoll.VkLongpollMode.GET_ATTACHMENTS
-                | longpoll.VkLongpollMode.GET_PTS
-                | longpoll.VkLongpollMode.GET_RANDOM_ID,
+                + longpoll.VkLongpollMode.GET_PTS
+                + longpoll.VkLongpollMode.GET_RANDOM_ID,
             )
         except TIMEOUT_EXCEPTIONS as ex:
             logger.warning(f"No longpoll: Timeout")

@@ -8,7 +8,7 @@ from aiogram_dialog.widgets.kbd import Next, Back, Row, Start, Cancel
 from aiogram_dialog.widgets.input import MessageInput
 
 from aiogram_dialog.api.exceptions import NoContextError
-from bots.telegram_bot.utils.fsm_states import (
+from ..utils.fsm_states import (
     CommonStates,
     EchoStates,
     BotStates,
@@ -49,22 +49,28 @@ common_dialog = Dialog(
     ),
 )
 
-repeat_dialog = Dialog(
-    Window(
-        Const("Just type something to me and I send same message"),
-        Row(
-            Cancel(Const("Cancel")),
-            Next(Const("Ok")),
-        ),
-        state=EchoStates.MENU,
-    ),
-    Window(
-        Const("Now write. I will wait..."),
-        Back(Const("I changed my mind")),
-        MessageInput(echo_action),
-        state=EchoStates.ECHO,
-    ),
-)
+# repeat_dialog = Dialog(
+#     Window(
+#         Const("Just type something to me and I send same message"),
+#         Row(
+#             Cancel(Const("Cancel")),
+#             Next(Const("Ok")),
+#         ),
+#         state=EchoStates.MENU,
+#     ),
+#     Window(
+#         Const("Now write. I will wait..."),
+#         Back(Const("I changed my mind")),
+#         MessageInput(echo_action),
+#         state=EchoStates.ECHO,
+#     ),
+# )
+
+
+# @rt.error
+# async def exception_handler(*args, **kwargs):
+#     logger.info(f"{args=}, {kwargs=}")
+#     pass
 
 
 @rt.message(StateFilter(None), Command("start"))

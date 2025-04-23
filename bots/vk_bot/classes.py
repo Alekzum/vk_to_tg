@@ -8,11 +8,19 @@ import pathlib
 import json
 
 
+class Image(BaseModel):
+    url: str
+    width: int
+    height: int
+
+
 class Sticker(BaseModel):
     inner_type: str
     sticker_id: int
     product_id: int
     is_allowed: bool
+    images: List[Image]
+    images_with_background: List[Image]
 
 
 class AudioMessage(BaseModel):
@@ -149,42 +157,48 @@ class MessageAction(BaseModel):
         }
 
 
-class ForwardMessage(BaseModel):
-    # model_type: Literal["m1"]
+class BaseMessage(BaseModel):
     attachments: List[Attachment]
     text: str
     conversation_message_id: int
     from_id: int
-    # random_id: int = 0
-    # peer_id: int
+    forwarded_messages: List["ForwardMessage"] = Field(alias="fwd_messages", default_factory=lambda: list())
+    reply_message: Optional["ReplyMessage"] = None
 
 
-class ReplyMessage(BaseModel):
+class ForwardMessage(BaseMessage):
+    pass
+    # attachments: List[Attachment]
+    # text: str
+    # conversation_message_id: int
+    # from_id: int
+    # fwd_messages: "List[ForwardMessage]" = Field(default_factory=lambda: list())
+    # reply_message: "Optional[ReplyMessage]" = None
+
+
+class ReplyMessage(ForwardMessage):
+    # pass
     date: datetime.datetime
     from_id: int
-    text: str
-    attachments: List[Attachment]
-    conversation_message_id: int
     id: int
     peer_id: int
 
+    @property
+    def link(self):
+        return f"https://web.vk.me/convo/{self.peer_id}?cmdif={self.conversation_message_id}"
 
-class Message(BaseModel):
-    date: datetime.datetime
-    from_id: int
-    id: int
+
+class Message(ReplyMessage):
+    # date: datetime.datetime
+    # from_id: int
+    # id: int
+    # peer_id: int
     version: int
     out: int
     important: bool
     is_hidden: bool
-    attachments: List[Attachment]
-    conversation_message_id: int
-    text: str
-    peer_id: int
-    random_id: int
-    forwarded_messages: List[ForwardMessage] = Field(alias="fwd_messages")
+    random_id: Optional[int] = None
     action: Optional[MessageAction] = None
-    reply_message: Optional["ReplyMessage"] = None
     reactions: Optional[List[Reaction]] = None
     last_reaction_id: Optional[int] = None
     update_time: Optional[int] = None

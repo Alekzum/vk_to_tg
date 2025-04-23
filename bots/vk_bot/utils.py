@@ -36,32 +36,39 @@ def beautify_print(obj: Event | Any, indent: int | None = 4, need_to_print=True)
     return string
 
 
-def get_message_info(event: Event, api: VkApiMethod) -> tuple[str, str]:
-    """time, other_string"""
-    try:
-        in_chat, mark = functions.get_conversation_info_by_chat_id(api, event.chat_id)
-    except (vk_api.exceptions.ApiError, AttributeError):
-        in_chat, mark = None, None
+def get_message_info(
+    event: Event | Message, api: VkApiMethod, include_msg_id=False
+) -> tuple[str, str, str]:
+    """returns: time, other_string, conservation's name
 
-    prep_time = (
-        (f"[{datetime.datetime.fromtimestamp(time) + datetime.timedelta(hours=4):%H:%M:%S}]")
-        if (time := (event.timestamp if hasattr(event, "timestamp") else None))
-        else "Unknown time"
+    f"[{time}] {other_string}"
+    """
+    chat_id: int
+    time_: float
+    if isinstance(event, Event):
+        chat_id = event.chat_id
+        time_ = event.timestamp  # type: ignore
+        sender_id = event.user_id or event.group_id
+
+    elif isinstance(event, Message):
+        chat_id = event.peer_id
+        time_ = event.date.timestamp()
+        sender_id = event.from_id
+
+    try:
+        chat, mark = functions.get_conversation_info(api, chat_id)
+    except vk_api.exceptions.ApiError as ex:
+        logger.info(f"catch {ex}")
+        chat = mark = "*unknown*"
+
+    time = datetime.datetime.fromtimestamp(time_) + datetime.timedelta(hours=4)
+    prep_time = time and f"{time:%H:%M:%S}" or "Unknown time"
+
+    sender = functions.get_dialog_name(api, sender_id)
+    text = f"{mark}[{chat} / {sender}]" + (
+        " (ID:{event.message_id})" if include_msg_id else ""
     )
-    sender_user = (
-        functions.get_user_name(api, user_id)
-        if (user_id := getattr(event, "user_id", None))
-        else None
-    )
-    sender_group = (
-        functions.get_group_name(api, group_id)
-        if (group_id := getattr(event, "group_id", None))
-        else None
-    )
-    sender = sender_user or sender_group or "*unknown*"
-    
-    r = f"{mark}[{in_chat} / {sender}] (ID:{event.message_id})"
-    return prep_time, r
+    return prep_time, text, chat
 
 
 def get_message_string(event: Event, api: VkApiMethod) -> tuple[str, bool]:

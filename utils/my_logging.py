@@ -114,8 +114,8 @@ class MyStreamHandler(logging.StreamHandler):
         has an 'encoding' attribute, it is used to determine how to do the
         output to the stream.
         """
-
-        if str(record) == str(self.last_record):
+        
+        if str(record).replace("\n", "\\•\\") == str(self.last_record).replace("\n", "\\•\\"):
             self.counter += 1
             self.last_record = self.last_record or record
             temp_record = copy.deepcopy(self.last_record)
