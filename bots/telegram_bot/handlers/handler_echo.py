@@ -8,11 +8,13 @@ from aiogram_dialog.widgets.input import MessageInput
 
 from aiogram_dialog.api.exceptions import NoContextError
 from ..utils.fsm_states import BotStates, EchoStates
+import structlog
+from utils.my_logging import getLogger
 import logging
 
 
-logger = logging.getLogger(__name__)
-rt = Router()
+logger = getLogger(__name__)
+rt = Router(name=__name__)
 
 
 async def echo_action(msg: Message, _, dialog_manager: DialogManager):
@@ -39,6 +41,7 @@ common_dialog = Dialog(
     ),
     Window(
         Const("Now write. I will wait..."),
+        MessageInput(echo_action),
         Back(Const("I changed my mind")),
         state=EchoStates.ECHO,
     ),

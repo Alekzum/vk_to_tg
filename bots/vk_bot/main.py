@@ -1,28 +1,33 @@
-from utils.config import CHATS_BLACKLIST, Config
-from vk_api.vk_api import VkApiMethod
-from vk_api.longpoll import VkEventType, Event
-import vk_api.longpoll  # type: ignore[import-untyped]
+from utils.config import OWNER_ID
+from utils.my_vk_api import VkApiMethod, AsyncVkLongPoll
+from utils.my_longpoll import (
+    get_client_and_longpoll,
+    load_longpoll_info,
+    save_longpoll_info,
+    get_last_vk_id,
+)
+from vk_api.longpoll import VkEventType, Event  # type: ignore
+
+from requests.exceptions import ConnectionError, Timeout
+from httpx import NetworkError, TimeoutException
 
 from .. import telegram_bot
-from . import my_functions as functions
-from .handlers import (
-    on_message_edit,
-    on_message_new,
-    on_message_react,
-    on_message_read,
-    on_message_read_self,
-    on_message_type,
-    on_other_event,
-    on_update_counter,
-    on_flag_interacted,
-)
+from .my_async_functions import get_dialog_name
+
+from . import handlers
 from .utils import beautify_print
-import datetime
-import logging
+from ..telegram_bot.classes import MyTelegram
+from utils.interface.user_settings import get_polling_state, set_polling_state
+
+from utils.my_logging import getLogger
 import asyncio
+import traceback
+import vk_api  # type: ignore
+from html import escape
 
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
+TIMEOUT_EXCEPTIONS = (Timeout, ConnectionError, NetworkError, TimeoutException)
 
 
 cache: dict[str, dict[tuple, dict]] = {
@@ -30,6 +35,29 @@ cache: dict[str, dict[tuple, dict]] = {
     "groups_list_to_dict": {},
     "conversations_list_to_dict": {},
 }
+
+
+def log(text: str) -> None:
+    # """like logger.info, but doesn't log via logger :clueless:"""
+    logger.debug(f"{text}")
+
+
+async def send_to_tg(
+    tgClient: MyTelegram, text: str, chat_id: int | None = None
+):
+    BLOCK_SIZE = 4000
+    blocks = [
+        text[BLOCK_SIZE * i : BLOCK_SIZE * (i + 1)]
+        for i in range(0, (len(text) // BLOCK_SIZE) + 1)
+    ]
+
+    logger.debug(f"{text=}, {blocks=}")
+    chat_id = chat_id or tgClient.CHAT_ID
+    for block in blocks:
+        await tgClient.tg.send_message(
+            chat_id=chat_id,
+            text=f"<blockquote expandable><code>{escape(block)}</code></blockquote>",
+        )
 
 
 def profiles_list_to_dict(src: list[dict]) -> dict[int, dict]:
@@ -57,118 +85,100 @@ def conversations_list_to_dict(src: list[dict]) -> dict[int, dict]:
 
 
 async def handle_(
-    event: Event,
-    api: VkApiMethod,
-    tg_client: telegram_bot.classes.MyTelegram,
-    profiles: list[dict] | None = None,
-    conversations: list[dict] | None = None,
-    groups: list[dict] | None = None,
+    event: Event, api: VkApiMethod, tg_client: telegram_bot.classes.MyTelegram
 ) -> bool:
-    chat_id = getattr(event, "chat_id", None)
-    profiles_ = profiles_list_to_dict(profiles) if profiles else {}
-    conversations_ = conversations_list_to_dict(conversations) if conversations else {}
-    groups_ = groups_list_to_dict(groups) if groups else {}
-    chat = (
-        functions.get_conversation_info(api, chat_id)[0] if chat_id else None
-    )
-    # beautify_print(event)
-    if event.type in [
-        601,
-        602,
-    ]:
-        # print(event.peer_id, event.type)
+    """uh...
+
+    Args:
+        event (Event): just event
+        api (VkApiMethod): user's API
+        tg_client (telegram_bot.classes.MyTelegram): user's tg client
+
+    Returns:
+        bool: Is chat in blacklist
+    """
+
+    def print_if_its_me(obj):
+        return beautify_print(obj) if tg_client.CHAT_ID == OWNER_ID else None
+
+    if event.type in {601, 602}:
         return False
 
-    if chat and chat.strip() in CHATS_BLACKLIST:
-        return False
+    await tg_client.config.load_values()
+
+    peer_id: int | None = getattr(event, "peer_id", None)
+    if peer_id:
+        if peer_id in tg_client.config._blacklist:
+            return False
+        logger.debug(f"{peer_id=}")
+        peer_name = handlers.chats_cache.get(
+            peer_id, await get_dialog_name(api, peer_id)
+        )
+        if peer_name is not None:
+            handlers.chats_cache[peer_id] = peer_name
+            if peer_name in tg_client.config._blacklist:
+                return False
+            logger.debug(f"{peer_name=}")
+
+    # peer_id = getattr(event, "chat_id", None)
+    # chat_id: int
+    if chat_id := round(getattr(event, "chat_id", 0) + 2e9):
+        if chat_id in tg_client.config._blacklist:
+            return False
+
+        chat = await get_dialog_name(api, chat_id) if chat_id else None
+        if chat in tg_client.config._blacklist:
+            return False
 
     if event.type == VkEventType.MESSAGE_NEW:
-        beautify_print(event)
-        await on_message_new(event, api, tg_client, profiles_, conversations_, groups_)
+        print_if_its_me(event)
+        await handlers.on_message_new(event, api, tg_client)
 
-    elif event.type in (VkEventType.USER_TYPING_IN_CHAT, VkEventType.USER_TYPING):
-        # beautify_print(event)
-        await on_message_type(event, api, tg_client, profiles_, conversations_, groups_)
+    elif event.type == VkEventType.USER_TYPING:
+        await handlers.on_user_typing(event, api, tg_client)
+
+    elif event.type == VkEventType.USER_TYPING_IN_CHAT:
+        await handlers.on_user_typing_in_chat(event, api, tg_client)
 
     elif event.type == VkEventType.MESSAGE_EDIT:
-        beautify_print(event)
-        await on_message_edit(event, api, tg_client, profiles_, conversations_, groups_)
+        print_if_its_me(event)
+        await handlers.on_message_edit(event, api, tg_client)
 
     elif event.type == VkEventType.READ_ALL_OUTGOING_MESSAGES:
-        await on_message_read(event, api, tg_client, profiles_, conversations_, groups_)
+        await handlers.on_real_all_outgoing_messages(event, api, tg_client)
 
     elif event.type == VkEventType.READ_ALL_INCOMING_MESSAGES:
-        beautify_print(event)
-        await on_message_read_self(event, api, tg_client, profiles_, conversations_, groups_)
+        print_if_its_me(event)
+        await handlers.on_read_all_incoming_messages(event, api, tg_client)
 
     elif event.type == VkEventType.MESSAGES_COUNTER_UPDATE:
-        await on_update_counter(event, api, tg_client)
+        await handlers.on_message_counter_update(event, api, tg_client)
 
-    elif event.type in {
-        VkEventType.MESSAGE_FLAGS_RESET,
-        VkEventType.MESSAGE_FLAGS_REPLACE,
-        VkEventType.MESSAGE_FLAGS_SET,
-    }:
-        await on_flag_interacted(event, api, tg_client)
+    # elif event.type in {
+    #     VkEventType.MESSAGE_FLAGS_RESET,
+    #     VkEventType.MESSAGE_FLAGS_REPLACE,
+    #     VkEventType.MESSAGE_FLAGS_SET,
+    # }:
+    #     await on_message_flag_interacted(event, api, tg_client)
 
     else:
-        beautify_print(event)
-        await on_other_event(event, api, tg_client, profiles_, conversations_, groups_)
+        print_if_its_me(event)
+        await handlers.on_other_event(event, api, tg_client)
     print()
     return True
 
 
-from ..telegram_bot.classes import MyTelegram
-import traceback
-import logging
-import vk_api
-import time
-
-from requests.exceptions import ConnectionError, Timeout
-
-from utils.my_longpoll import (
-    get_client_and_longpoll,
-    load_longpoll_info,
-    save_longpoll_info,
-    get_last_vk_id,
-)
-from utils.interface.vk_messages import get_tg_id
-
-
-logger = logging.getLogger(__name__)
-TIMEOUT_EXCEPTIONS = (Timeout, ConnectionError)
-
-
-def log(text: str) -> None:
-    """like logger.info, but doesn't log via logger"""
-    import datetime
-
-    print(f"{str(datetime.datetime.now())[:-3]} - [UNKNOWN] - main.py - {text}")
-
-
-async def send_to_tg(tgClient: MyTelegram, text: str):
-    BLOCK_SIZE = 4000
-    blocks = [
-        text[BLOCK_SIZE * i : BLOCK_SIZE * (i + 1)]
-        for i in range(0, len(text) // BLOCK_SIZE)
-    ]
-
-    logger.debug(f"{blocks=}")
-    for block in blocks:
-        await tgClient.send_text(f"<blockquote expandable>{block}</blockquote>")
-
-
 async def get_old_messages(
     api: VkApiMethod,
-    vk_longpoll: vk_api.longpoll.VkLongPoll,
+    vk_longpoll: AsyncVkLongPoll,
     tg_client: MyTelegram,
 ) -> None:
-    chat_id = tg_client.CHAT_ID
-    max_msg_id = await get_last_vk_id(chat_id)
+    user_id = tg_client.CHAT_ID
+    max_msg_id = await get_last_vk_id(user_id)
     result: dict = {"more": 1}
     index = 0
     while "more" in result and result["more"]:
-        result = api.messages.getLongPollHistory(
+        result = await api.messages.getLongPollHistory(
             ts=vk_longpoll.ts,
             pts=vk_longpoll.pts,
             lp_version=3,
@@ -180,17 +190,14 @@ async def get_old_messages(
         key = result["credentials"]["key"]
         pts = result["new_pts"]
 
-        profiles = result.get("profiles", [])
-        groups = result.get("groups", [])
-        conversations = result.get("conversations", [])
         history: list[list] = iter(result["history"].copy())
-        del result["history"], result["credentials"]  # for less logs
 
         for event in history:
-            logger.debug(f"getLongPollHistory - {event=}")
-            # beautify_print(event)
+            # logger.debug(f"getLongPollHistory - {event=}")
             if event[0] in {4, 5}:
-                msg_ = api.messages.getById(message_ids=event[1])["items"]
+                msg_ = (await api.messages.getById(message_ids=event[1]))[
+                    "items"
+                ]
                 if not msg_:
                     continue
                 msg = msg_[0]
@@ -198,10 +205,15 @@ async def get_old_messages(
                 fake_event = Event(to_new_event)
             else:
                 fake_event = Event(event)
-            
+
             await handle(fake_event, api, tg_client)
+            if tg_client.CHAT_ID == OWNER_ID:
+                logger.debug(f"getLongPollHistory - {event=}, {fake_event=}")
             index += 1
-            await asyncio.sleep(0)
+            try:
+                await asyncio.sleep(0)
+            except asyncio.CancelledError:
+                break
 
         vk_longpoll.server = server
         vk_longpoll.ts = ts
@@ -210,91 +222,130 @@ async def get_old_messages(
         await save_longpoll_info(tg_client.CHAT_ID, vk_longpoll, log=True)
 
     if index:
-        log(f"Processed {index} updates")
-
-
-async def main(chat_id: int):
-    vk_client, vk_longpoll = await get_client_and_longpoll(chat_id)
-    api = vk_client.get_api()
-
-    tg_client = MyTelegram(chat_id)
-    await tg_client._init()
-
-    logger.info(f"On server:\n  ts: {vk_longpoll.ts}\n  pts: {vk_longpoll.pts}")
-    server_ts, server_pts = vk_longpoll.ts, vk_longpoll.pts
-
-    await load_longpoll_info(chat_id, vk_longpoll)
-    vk_longpoll.update_longpoll_server(update_ts=False)
-    logger.info(f"Saved:\n  ts: {vk_longpoll.ts}\n  pts: {vk_longpoll.pts}")
-    if server_pts and server_pts - vk_longpoll.pts > 0:
-        logger.info(f"Bot is getting last {server_pts-vk_longpoll.pts} messages")
-        logger.debug(f"{(server_ts or 0)-(vk_longpoll.ts or -1) =}")
-        await get_old_messages(api, vk_longpoll, tg_client)
-    else:
-        logger.info(f"Bot is up-to-date with server :3")
-
-    # exit()
-    await tg_client.send_text("Бот запущен!")
-    logger.info("Бот запущен!")
-
-    while True:
-        try:
-            index = 0
-            events = vk_longpoll.check()
-            for event in events:
-                need_to_log = await handle(event, api, tg_client)
-                if need_to_log:
-                    index += 1
-                    logger.debug(f"ts={vk_longpoll.ts}, pts={vk_longpoll.pts}")
-                await asyncio.sleep(0)
-            if index:
-                await save_longpoll_info(chat_id, vk_longpoll, log=False)
-                log(f"Processed {index} updates")
-                logger.debug(f"ts={vk_longpoll.ts}, pts={vk_longpoll.pts}")
-
-        except KeyboardInterrupt:
-            await tg_client.stop()
-            break
-
-        except TIMEOUT_EXCEPTIONS:
-            logger.warning("timeout")
-            await asyncio.sleep(1)
-        
-        try:
-            await asyncio.sleep(0)
-        except asyncio.CancelledError:
-            await tg_client.stop()
-            break
-
-    await save_longpoll_info(chat_id, vk_longpoll, log=True)
-    logger.info(f"ts={vk_longpoll.ts}, pts={vk_longpoll.pts}")
+        logger.debug(f"Processed {index} updates", user_id=user_id)
 
 
 async def handle(
-    event: Event,
-    api: VkApiMethod,
-    tg_client: MyTelegram,
-    profiles: list[dict] | None = None,
-    conversations: list[dict] | None = None,
-    groups: list[dict] | None = None,
-    _retries=5,
+    event: Event, api: VkApiMethod, tg_client: MyTelegram, _retries=5
 ) -> bool:
+    """uh... handle event and except ApiError
+
+    Args:
+        event (Event): just event
+        api (VkApiMethod): user's API
+        tg_client (telegram_bot.classes.MyTelegram): user's tg client
+
+    Returns:
+        bool: Is chat in blacklist
+    """
+
     async def handle_exception(ex: Exception):
         error_str = "".join(traceback.format_exception(ex))
-        await send_to_tg(tg_client, error_str)
-        time.sleep(1)
-        await send_to_tg(tg_client, f"Событие: {event!r}")
+
         logger.error(error_str)
+        logger.debug(error_str)
+        await send_to_tg(
+            tg_client, error_str + "\n" + escape(f"Событие: {event!r}")
+        )
+        # logger.error(error_str)
 
     try:
-        return await handle_(event, api, tg_client, profiles, conversations, groups)
+        return await handle_(event, api, tg_client)
     except vk_api.exceptions.ApiError as ex:
         if _retries > 0:
-            time.sleep(1)
+            await asyncio.sleep(1)
             return await handle(event, api, tg_client, _retries=_retries - 1)
         await handle_exception(ex)
         return False
 
-    except Exception as ex:
-        await handle_exception(ex)
-        return False
+    # except Exception as ex:
+    #     await handle_exception(ex)
+    #     return False
+
+
+async def main(user_id: int):
+    logger.debug("Получение вк клиента и longpoll'а...", user_id=user_id)
+    vk_client, vk_longpoll = await get_client_and_longpoll(user_id)
+    api = vk_client.get_api()
+
+    tg_client = MyTelegram(user_id)
+    logger.debug("Бот стартует...", user_id=user_id)
+    await tg_client.init()
+
+    server_ts, server_pts = vk_longpoll.ts, vk_longpoll.pts
+    logger.info("On server", ts=server_ts, pts=server_pts, user_id=user_id)
+    server_ts = server_ts if isinstance(server_ts, int) else 32
+
+    await load_longpoll_info(user_id, vk_longpoll)
+    await vk_longpoll.update_longpoll_server(update_ts=False)
+    logger.info(
+        "Saved", ts=vk_longpoll.ts, pts=vk_longpoll.pts, user_id=user_id
+    )
+    logger.info(
+        f"Bot is getting last {server_ts - (vk_longpoll.ts if isinstance(vk_longpoll.ts, int) else 32)} events",
+        user_id=user_id,
+    )
+    await get_old_messages(api, vk_longpoll, tg_client)
+
+    server_ts, server_pts = vk_longpoll.ts, vk_longpoll.pts
+    await set_polling_state(user_id, True)
+    await tg_client.send_text("Бот запущен!")
+    logger.info("Бот запущен!", user_id=user_id)
+
+    while await get_polling_state(user_id):
+        try:
+            index = 0
+            events = await vk_longpoll.check()
+            for event in events:
+                need_to_log = await handle(event, api, tg_client)
+                if need_to_log:
+                    index += 1
+                    logger.debug(
+                        "ts+pts",
+                        ts=vk_longpoll.ts,
+                        pts=vk_longpoll.pts,
+                        user_id=user_id,
+                    )
+
+                await asyncio.sleep(0)
+            if index:
+                await save_longpoll_info(user_id, vk_longpoll, log=False)
+                logger.debug(f"Processed {index} updates", user_id=user_id)
+                if user_id == OWNER_ID:
+                    logger.info(
+                        "ts+pts",
+                        ts=vk_longpoll.ts,
+                        pts=vk_longpoll.pts,
+                        user_id=user_id,
+                    )
+
+        except KeyboardInterrupt:
+            logger.info("set polling state to False")
+            await set_polling_state(user_id, False)
+
+        except TIMEOUT_EXCEPTIONS as ex:
+            logger.warning("timeout")
+            logger.debug(f"timeout, {ex=}")
+            await asyncio.sleep(10)
+
+        except Exception as ex:
+            trace = traceback.format_exc()
+
+            public_trace = f"Возникла ошибка. {ex}"
+            private_trace = f"{user_id=}, traceback: {trace}"
+
+            logger.warning("Exception!", ex=ex, user_id=user_id)
+            print(private_trace)
+            logger.debug(private_trace, exc_info=True, user_id=user_id)
+            await tg_client.send_text(public_trace)
+            await send_to_tg(tg_client, text=private_trace, chat_id=OWNER_ID)
+
+        try:
+            await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            break
+
+    await tg_client.stop()
+
+    await save_longpoll_info(user_id, vk_longpoll, log=True)
+    logger.info(f"ts={vk_longpoll.ts}, pts={vk_longpoll.pts}")

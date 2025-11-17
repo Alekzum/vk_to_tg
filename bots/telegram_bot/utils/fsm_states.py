@@ -12,12 +12,22 @@ class EchoStates(StatesGroup):
 
 
 class BotStates(StatesGroup):
+    class Answer(StatesGroup):
+        SEND_MESSAGE = State()
+        ADD_MEDIA = State()
+        LOADING_CHATS = State()
+        CHOOSE_CHAT = State()
+        MAYBE_CHOOSE_CHAT = State()
     MENU = State()
     # SETTINGS = State()
     START_POLLING = State()
-    ANSWER = State()
+    # ANSWER = State()
+    # CHOOSE_CHAT = State()
 
 
 class SettingStates(StatesGroup):
+    class Blacklist(StatesGroup):
+        SELECT = State()
+        CONFIRM = State()
     MENU = State()
     

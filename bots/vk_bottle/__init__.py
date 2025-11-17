@@ -1,4 +1,4 @@
-from .main import handle
+from .main import on_message_new, handle
 from . import my_async_functions
 from . import classes
 from . import main

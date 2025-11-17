@@ -34,14 +34,6 @@ def beautify_print(obj: Event | Any, indent: int | None = 4, need_to_print=True)
 
 
 def get_pair_for_dict(event: Event) -> tuple[int, int] | None:
-    """Make key for dict from Event's peer_id + message_id or returns None if both of them not found
-
-    Args:
-        event (Event): event which contains peer+message ids
-
-    Returns:
-        tuple[int, int] | None: Result key
-    """    
     peer_id: int | None = getattr(event, "peer_id", None)
     msg_id: int | None = getattr(event, "message_id", None)
     if peer_id and msg_id:

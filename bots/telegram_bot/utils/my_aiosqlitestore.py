@@ -13,9 +13,11 @@ import sqlite3
 import pickle
 import json
 
+import structlog
+from utils.my_logging import getLogger
 import logging
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 class AioSQLStorage(BaseStorage):

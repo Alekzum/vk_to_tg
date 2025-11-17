@@ -1,32 +1,26 @@
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import Literal, Any, TypeVar, overload
-import logging
-import json
-import time
 
-from dpath.exceptions import PathNotFound
-import pathlib
-import dotenv
-import dpath
-import re
-
-from .interface.user_settings import DB_PATH, get_user, save_user
-import sqlite3
-
-from functools import wraps
 import asyncio
+import pathlib
+import sqlite3
+import dotenv
+import os
+from functools import wraps
+from dataclasses import dataclass
+from typing import Any, Literal, TypeVar, overload
+from utils.my_logging import getLogger
+from .interface.user_settings import DB_PATH, get_user, save_user
 
-
+dotenv.load_dotenv(".env")
 CHATS_BLACKLIST: list[str] = ['🚖🚕Такси "Ладья"🚕🚖']
 config_path = pathlib.Path("data", "config.json")
 
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 T = TypeVar("T")
 _DEFAULT = object()
 OWNER_ID = int(
-    dotenv.get_key(".env", "CHAT_ID")
+    os.environ.get("CHAT_ID")
     or dotenv.set_key(
         ".env",
         "CHAT_ID",
@@ -67,6 +61,7 @@ def setup_thing(self: "Config"):
             return await func(*args, **kwargs)
 
         return inner_async if asyncio.iscoroutinefunction(func) else inner_sync
+
     return check_for_init
 
 
@@ -84,7 +79,7 @@ class Config:
     _ACCESS_TOKEN: str
     """For vkontakte"""
 
-    _blacklist: set[str]
+    _blacklist: set[str | int]
     """Which dialogs needs to be ignored"""
 
     _pts: int
@@ -109,30 +104,50 @@ class Config:
         thing = setup_thing(self)
         self.save_values = thing(self.save_values)
 
+    def _set_pts(self, value: int):
+        self._pts = value
+
+    def _set_ts(self, value: int):
+        self._ts = value
+
+    @property
+    def pts(self):
+        return self._pts
+
+    @property
+    def ts(self):
+        return self._ts
+
     def __str__(self):
         return f"""<Config {self._ADMIN_IDS=}"""
 
     def __repr__(self):
-        return f"""utils.classes.Config({['{}={}'.format(n, getattr(self, n)) for n in self._entries]})"""
+        return f"""utils.classes.Config({["{}={}".format(n, getattr(self, n)) for n in self._entries]})"""
 
     def __del__(self):
         self._connector.close()
 
     async def save_values(self):
-        await save_user(self._chat_id, self._blacklist, self._pts, self._ts)
-        ...
+        await save_user(
+            tg_id=self._chat_id,
+            items=self._blacklist,
+            pts=self._pts,
+            ts=self._ts,
+        )
 
     async def load_values(self):
         user_info = await get_user(self._chat_id)
+        self.POLLING_STATE = user_info.polling_state
         self._blacklist = user_info.blacklist
         self._ACCESS_TOKEN = user_info.vk_token
-        self.POLLING_STATE = user_info.pooling_state
-        self._pts = user_info.pts
-        self._ts = user_info.ts
+        self._set_pts(user_info.pts)
+        self._set_ts(user_info.ts)
         return self
 
     @overload
-    def get_variable(self, variable_name: Literal["ADMIN_IDS"]) -> list[int]: ...
+    def get_variable(
+        self, variable_name: Literal["ADMIN_IDS"]
+    ) -> list[int]: ...
     @overload
     def get_variable(self, variable_name: Literal["BOT_TOKEN"]) -> str: ...
 
@@ -142,25 +157,33 @@ class Config:
     # def get_variable(self, variable_name: Literal["NEED_UPDATE"]) -> bool: ...
     def get_variable(self: "Config", variable_name: ENTIRES4FUNCS):
         if not isinstance(variable_name, str) and isinstance(self, Config):
-            raise TypeError(f"Variable name must be str, not {type(variable_name)}!")
+            raise TypeError(
+                f"Variable name must be str, not {type(variable_name)}!"
+            )
 
         match variable_name:
             case "BOT_TOKEN":
-                return dotenv.get_key(
-                    self.dot_env_file, "BOT_TOKEN"
-                ) or self.update_variable("BOT_TOKEN")
+                return os.environ.get("BOT_TOKEN") or self.update_variable(
+                    "BOT_TOKEN"
+                )
 
             case "ADMIN_IDS":
-                if env_admin_ids := dotenv.get_key(self.dot_env_file, "ADMIN_IDS"):
-                    return list(int(i.strip()) for i in env_admin_ids.split(","))
+                if env_admin_ids := os.environ.get("ADMIN_IDS"):
+                    return list(
+                        int(i.strip()) for i in env_admin_ids.split(",")
+                    )
 
                 return self.update_variable("ADMIN_IDS")
 
             case _:
-                raise KeyError('Need one of these values: "BOT_TOKEN", "ADMIN_IDS"')
+                raise KeyError(
+                    'Need one of these values: "BOT_TOKEN", "ADMIN_IDS"'
+                )
 
     @overload
-    def update_variable(self, variable_name: Literal["ADMIN_IDS"]) -> list[int]: ...
+    def update_variable(
+        self, variable_name: Literal["ADMIN_IDS"]
+    ) -> list[int]: ...
     @overload
     def update_variable(self, variable_name: Literal["BOT_TOKEN"]) -> str: ...
 
@@ -190,7 +213,9 @@ class Config:
 
             case "ADMIN_IDS":
                 ADMIN_IDS = ""
-                while not all(i.strip().isdecimal() for i in ADMIN_IDS.split(",")):
+                while not all(
+                    i.strip().isdecimal() for i in ADMIN_IDS.split(",")
+                ):
                     ADMIN_IDS = input(
                         "Введите id пользователей-админов в телеграм (https://t.me/my_id_bot в помощь, писать через запятую): "
                     )

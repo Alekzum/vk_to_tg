@@ -2,6 +2,8 @@
 data
 test*.py
 __archive__
+*.log
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,101 +1,145 @@
-from utils.my_classes import TgMessage
-from dataclasses import dataclass
-from typing import Optional
-
-from utils.decorators import repeat_until_complete
-
 from utils.config import Config, OWNER_ID
-from httpx import Client, AsyncClient
-import logging
+from utils.my_logging import getLogger
+from os import environ as ENVIRON
+from typing import overload, Any
+from pyrogram import Client, raw, types, enums  # type: ignore
+from cachetools import cached  # type: ignore
+from dataclasses import dataclass
+import re
 
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
-@dataclass
-class ResponseParameters:
-    migrate_to_ADMIN_IDS: Optional[int]
-    """The group has been migrated to a supergroup with the specified identifier. This number may have more than 32 significant bits and 
-    some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed
-    64-bit integer or double-precision float type are safe for storing this identifier."""
-    retry_after: Optional[int]
-    """In case of exceeding flood control, the number of seconds left to wait before the request can be repeated"""
+URL_RE = re.compile(
+    r"(https?:\/\/(www\.)?"
+    r"[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,4}\b"
+    r"([-a-zA-Z0-9@:%_\+.~#?&//=]*))"
+)
 
 
-@dataclass
-class Response:
-    ok: bool
-    # ok == True:
-    result: Optional[dict] = None
-    # ok == False:
-    description: Optional[str] = None
-    error_code: Optional[int] = None
-    parameters: Optional[ResponseParameters] = None
-
-    def __init__(self, raw: dict):
-        self.ok = raw["ok"]
-        self.result = raw.get("result")
-        self.description = raw.get("description")
-        self.error_code = raw.get("error_code")
-        self.parameters = raw.get("parameters")
-
-
+@cached(cache={})
 @dataclass
 class MyTelegram:
     config: Config
-    client: AsyncClient
     CHAT_ID: int
+    tg: Client
 
     def __init__(self, chat_id: int = OWNER_ID):
-        self.config = config = Config(chat_id)
-        self.client = AsyncClient(
-            base_url=f"https://api.telegram.org/bot{config._BOT_TOKEN}/"
-        )
+        self.config = cfg = Config(chat_id)
+
         self.CHAT_ID = chat_id
-
-    async def _init(self):
-        await self.config.load_values()
-    
-    # @repeat_until_complete
-    async def _invoke(self, path: str, data: dict) -> Response:
-        repeat_post = repeat_until_complete(self.client.post)
-        request = await repeat_post(path, json=data)
-        response = request.json()
-        result = Response(response)
-        return result
-
-    async def send_message(
-        self, text: str, reply_to_message_id: Optional[int] = None
-    ) -> TgMessage | Response:
-
-        response = await self._invoke(
-            "sendMessage",
-            dict(
-                chat_id=self.CHAT_ID,
-                text=text,
-                reply_to_message_id=reply_to_message_id,
-                parse_mode="HTML",
-            ),
+        class_tg: Client | None = getattr(MyTelegram, "tg", None)
+        self.tg = class_tg or Client(
+            name="PyrogramVkontakteToTelegramBot",
+            api_id=ENVIRON["API_ID"],
+            api_hash=ENVIRON["API_HASH"],
+            bot_token=cfg._BOT_TOKEN,
+            workdir="data",
+            parse_mode=enums.ParseMode.HTML,
         )
-        # logger.info(f"{response=}")
-        if response.ok and (msg := response.result):
-            msg["from_user"] = msg["from"]
-            del msg["from"]
-            msg["id"] = msg["message_id"]
-            del msg["message_id"]
-            message = TgMessage(**msg)
-            return message
-        else:
-            return response
 
-    async def send_text(self, text) -> TgMessage | Response:
-        msg = await self.send_message(text)
-        # logger.info(f"{msg=}")
+        setattr(MyTelegram, "tg", self.tg)
+
+    async def init(self) -> None:
+        tg = self.tg
+        if not tg.is_connected:
+            is_authorized = await tg.connect()
+            try:
+                if not is_authorized:
+                    await tg.authorize()
+                await tg.invoke(raw.functions.updates.GetState())  # type: ignore
+            except (Exception, KeyboardInterrupt):
+                await tg.disconnect()
+                raise
+            else:
+                tg.me = await tg.get_me()
+                await tg.initialize()
+
+        await self.config.load_values()
+
+    @overload
+    async def get_messages(self, message_ids: int) -> types.Message: ...
+    @overload
+    async def get_messages(
+        self, message_ids: list[int]
+    ) -> list[types.Message]: ...
+    async def get_messages(
+        self, message_ids: int | list[int]
+    ) -> types.Message | list[types.Message]:
+        msg = await self.tg.get_messages(
+            chat_id=self.CHAT_ID,
+            message_ids=message_ids,
+        )
+        if msg is None:
+            raise KeyError("Didn't found message with given ID :(")
+
+        if isinstance(message_ids, list):
+            msg = [msg] if not isinstance(msg, list) else msg
+            return msg
+
+        msg = msg[0] if isinstance(msg, list) else msg
         return msg
 
-    async def reply_text(self, msg_id: int | None, text: str) -> TgMessage | Response:
-        msg = await self.send_message(text, reply_to_message_id=msg_id)
+    async def send_text(
+        self,
+        text: str,
+        reply_markup: Any = None,
+        reply_parameters: types.ReplyParameters | Any = None,
+        link_preview_index: int = 0,
+    ) -> types.Message:
+        return await self.tg.send_message(
+            chat_id=self.CHAT_ID,
+            text=text,
+            reply_markup=reply_markup,
+            reply_parameters=reply_parameters,
+            link_preview_options=types.LinkPreviewOptions(
+                url=find_url(text, index=link_preview_index)
+            ),
+        )
+
+    async def reply_text(
+        self,
+        msg_id: int,
+        text: str,
+        reply_markup: Any = None,
+        link_preview_index: int = 0,
+    ) -> types.Message:
+        return await self.send_text(
+            text=text,
+            reply_markup=reply_markup,
+            reply_parameters=types.ReplyParameters(message_id=msg_id),
+            link_preview_index=link_preview_index,
+        )
+
+    async def edit_text(
+        self,
+        msg_id: int,
+        text: str,
+        reply_markup: Any = None,
+        link_preview_index: int = 0,
+    ) -> types.Message:
+        msg = await self.tg.edit_message_text(
+            chat_id=self.CHAT_ID,
+            message_id=msg_id,
+            text=text,
+            reply_markup=reply_markup,
+            link_preview_options=types.LinkPreviewOptions(
+                url=find_url(text, index=link_preview_index)
+            ),
+        )
+        if isinstance(msg, bool):
+            logger.error(f"{type(msg)=}!")
+            raise TypeError(f"{type(msg)=}!")
         return msg
 
     async def stop(self):
-        await self.send_message("Бот остановлен.")
+        await self.send_text("Бот остановлен.")
+        if self.tg.is_connected:
+            await self.tg.disconnect()
+
+
+def find_url(text: str, index: int = 0) -> str:
+    matches = URL_RE.findall(text)
+    match = matches[index][0]
+    return match

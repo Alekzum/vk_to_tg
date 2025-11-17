@@ -1,11 +1,11 @@
-from aiogram import Router
+from aiogram import Router, Bot
 from aiogram.filters import Command, StateFilter
-from aiogram.types import Message
+from aiogram.types import Message, ErrorEvent
 from aiogram.utils import formatting
 from aiogram_dialog import Dialog, Window, DialogManager, StartMode, ShowMode
 from aiogram_dialog.widgets.text import Const
-from aiogram_dialog.widgets.kbd import Next, Back, Row, Start, Cancel
-from aiogram_dialog.widgets.input import MessageInput
+from aiogram_dialog.widgets.kbd import Next, Start
+from utils.config import OWNER_ID
 
 from aiogram_dialog.api.exceptions import NoContextError
 from ..utils.fsm_states import (
@@ -14,18 +14,22 @@ from ..utils.fsm_states import (
     BotStates,
     SettingStates,
 )
+import structlog
+from utils.my_logging import getLogger
 import logging
+import traceback
+from html import escape
 
 
-logger = logging.getLogger(__name__)
-rt = Router()
+logger = getLogger(__name__)
+rt = Router(name=__name__)
 
 
 HELP_MENU = formatting.as_marked_section(
     "That you can do:",
-    "Make act me like echo-bot (repeat messages)",
-    "Start getting messages from VK via me",
-    "Tune my settings (VK's token for example)",
+    "Use as echo-bot (repeat messages)",
+    "Start getting messages from VK",
+    "Tune settings (VK's token for example)",
 ).as_html()
 
 
@@ -42,9 +46,9 @@ common_dialog = Dialog(
     ),
     Window(
         Const(HELP_MENU),
-        Start(text=Const("Repeat messages"), id="echo_menu", state=EchoStates.MENU),
         Start(text=Const("Start getting messages"), id="bot_menu", state=BotStates.MENU),
         Start(text=Const("Settings"), id="settings_menu", state=SettingStates.MENU),
+        Start(text=Const("Repeat messages"), id="echo_menu", state=EchoStates.MENU),
         state=CommonStates.MENU,
     ),
 )
@@ -67,10 +71,24 @@ common_dialog = Dialog(
 # )
 
 
+@rt.error()
+async def error_handler(error: ErrorEvent, bot: Bot):
+    logger.critical(f"Critical error caused by %s", error.exception, exc_info=True)
+    # error_message = f"Critical error caused by %s" % error.exception
+    # await bot.send_message(OWNER_ID, )
+
+    error_str = "".join(traceback.format_exception(error.exception, limit=3))
+    for chunk in [error_str[i*4096:(i+1)*4096] for i in range(len(error_str)//4096)]:
+        await bot.send_message(OWNER_ID, escape(chunk))
+    # logger.error(f"{error.exception=}")
+
+
 # @rt.error
-# async def exception_handler(*args, **kwargs):
-#     logger.info(f"{args=}, {kwargs=}")
-#     pass
+# async def exception_handler(bot: Bot, *args, **kwargs):
+#     msg=f"{args=}, {kwargs=}"
+#     logger.warning(msg)
+#     await bot.send_message(OWNER_ID, msg)
+#     # pass
 
 
 @rt.message(StateFilter(None), Command("start"))

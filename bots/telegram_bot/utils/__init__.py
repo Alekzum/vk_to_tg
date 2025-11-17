@@ -3,12 +3,13 @@ from . import my_aiosqlitestore
 from . import my_middlewares
 from . import my_routers
 from . import fsm_states
+from . import my_vk
 
 
 from bots.telegram_bot.utils.my_middlewares import CooldownMiddleware
 from bots.telegram_bot.utils.my_aiosqlitestore import AioSQLStorage
-from aiogram_dialog import setup_dialogs
 from aiogram.client.default import DefaultBotProperties
+from aiogram_dialog import setup_dialogs
 from aiogram import Bot, Dispatcher
 from utils.config import Config, OWNER_ID
 from ..handlers import get_rt

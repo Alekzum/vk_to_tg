@@ -5,7 +5,9 @@ from aiogram.filters import Command, CommandObject
 from aiogram.utils import formatting
 from aiogram_dialog import DialogManager
 from aiogram_dialog.api.exceptions import NoContextError
-from typing import Any
+from typing import Any, Callable
+import structlog
+from utils.my_logging import getLogger
 import logging
 
 # from utils.text2image import text_to_image
@@ -13,8 +15,8 @@ import json
 import html
 
 
-logger = logging.getLogger(__name__)
-rt = Router()
+logger = getLogger(__name__)
+rt = Router(name=__name__)
 
 COMMANDS_DESCRIPTION: dict[str, str] = dict(
     dev="Получить этот лист с командами",
@@ -28,6 +30,7 @@ COMMANDS_DESCRIPTION: dict[str, str] = dict(
     middleware_data="Получить доступные переменные в функции",
     current_data="Получить доступные переменные в функции и диалоге",
     current_state="Получить текущее состояние бота",
+    eval="Выполнить команду",
 )
 
 HELP_TEXT = formatting.as_marked_section(
@@ -36,10 +39,10 @@ HELP_TEXT = formatting.as_marked_section(
 ).as_html()
 
 
-def clear_dict(d: dict | Any, _d=3) -> dict:
+def clear_dict(d: dict | Any, _depth=3) -> dict:
     return (
-        {k: clear_dict(v, _d - 1) for (k, v) in d.copy().items() if k[0] != "_"}
-        if isinstance(d, dict) and _d > 1
+        {k: clear_dict(v, _depth - 1) for (k, v) in d.copy().items() if k[0] != "_"}
+        if isinstance(d, dict) and _depth >= 1
         else d
     )
 
@@ -94,11 +97,12 @@ async def cmd_delete_data(
 async def cmd_data(
     message: Message, dialog_manager: DialogManager, command: CommandObject
 ):
-    required_data = dict(
-        middleware_data=dict(middleware_data=dialog_manager.middleware_data),
-        dialog_data=dict(dialog_data=dialog_manager.dialog_data),
-        global_data=globals().copy(),
-        local_data=locals().copy(),
+    make_dict: Callable[[dict[Any, Any]], dict[Any, type]] = lambda d: {k: type(v) for (k, v) in d.copy().items()}
+    required_data: dict[str, dict[Any, Any]] = dict(
+        middleware_data=dict(middleware_data=make_dict(dialog_manager.middleware_data)),
+        dialog_data=dict(dialog_data=make_dict(dialog_manager.dialog_data)),
+        global_data=dict(global_data=make_dict(globals().copy())),
+        local_data=dict(local_data=make_dict(locals().copy())),
     )
     required_data["current_data"] = required_data.copy()
     required_data = clear_dict(required_data)
@@ -121,6 +125,19 @@ async def cmd_data(
         await message.answer(f"You are not in dialog now")
     # except Exception as ex:
     #     await message.answer(f"Didn't fetch data because {ex=}")
+
+
+@rt.message(F.from_user.id.in_({OWNER_ID}), Command("eval"))
+async def cmd_eval(message: Message, dialog_manager: DialogManager):
+    assert message.text
+    cmd = " ".join(message.text.split(" ")[1:])
+    try:
+        result = eval(cmd, globals=globals(), locals=locals())
+    except Exception as result_:
+        result = result_
+
+    to_out = html.escape(str(result))
+    await message.answer(to_out)
 
 
 @rt.message(F.from_user.id.in_({OWNER_ID}), Command("current_state"))

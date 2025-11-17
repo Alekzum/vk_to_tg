@@ -1,189 +1,148 @@
-from typing import IO
 import logging
-import sys
+import logging.handlers
 import os
-import copy
+import sys
+import typing
 
+import structlog
 
-class MyFileHandler(logging.FileHandler):
-    def __init__(self, filename, mode="a", encoding=None, delay=False, errors=None):
-        super().__init__(filename, mode, encoding, delay, errors)
-        self.message_to_write = ""
-        self.last_record = None
-        self.counter = 0
-
-    def _write(self, record, rewrite_line=False):
-        if self.stream is None:
-            if self.mode != "w" or not self._closed:
-                self.stream = self._open()
-        if self.stream:
-            # MyStreamHandler.emit(self, record)
-            self.emit_file(record, rewrite_line)
-
-    def emit(self, record):
-        if str(record) == str(self.last_record):
-            self.counter += 1
-            self.last_record = self.last_record or record
-            temp_record = copy.deepcopy(self.last_record)
-            temp_record.created = self.last_record.created
-            temp_record.msg += f" x{self.counter}"
-            self._write(temp_record, rewrite_line=True)
-            return
-
-        self._write(record, rewrite_line=False)
-        self.last_record = record
-        self.counter = 1
-
-    def emit_file(self, record: logging.LogRecord, rewrite_line: bool = False):
-        try:
-            msg = self.format(record)
-            stream = self.stream
-            # issue 35046: merged two stream.writes into one.
-
-            if self.message_to_write and not rewrite_line:
-                stream.write(self.message_to_write)
-
-            self.message_to_write = msg + "\n"
-            # self.flush()
-        except RecursionError:  # See issue 36272
-            raise
-        except Exception:
-            self.handleError(record)
-
-    def close(self):
-        self.stream.write(self.message_to_write)
-        with self.lock:
-            try:
-                if self.stream:
-                    try:
-                        self.flush()
-                    finally:
-                        stream = self.stream
-                        self.stream = None
-                        if hasattr(stream, "close"):
-                            stream.close()
-            finally:
-                # Issue #19523: call unconditionally to
-                # prevent a handler leak when delay is set
-                # Also see Issue #42378: we also rely on
-                # self._closed being set to True there
-                MyStreamHandler.close(self)
-
-
-class MyStreamHandler(logging.StreamHandler):
-    def __init__(self, stream: IO | None = None):
-        """
-        Initialize the handler.
-
-        If stream is not specified, sys.stderr is used.
-        """
-        logging.StreamHandler.__init__(self, stream)
-        self.last_message: str = ""
-        self.counter: int = 1
-        self.last_record: logging.LogRecord | None = None
-
-    def flush(self):
-        """
-        Flushes the stream.
-        """
-        with self.lock:
-            if self.stream and hasattr(self.stream, "flush"):
-                # self.stream.seek(-len(self.last_logged_message), os.SEEK_END)
-                self.stream.flush()
-
-    def _write(self, record: logging.LogRecord, rewrite_line: bool = False):
-        try:
-            msg = self.format(record)
-            stream = self.stream
-            # issue 35046: merged two stream.writes into one.
-            stream.write("\r" + msg + ("" if rewrite_line else self.terminator))
-            self.flush()
-        except RecursionError:  # See issue 36272
-            raise
-        except Exception:
-            self.handleError(record)
-
-    def emit(self, record: logging.LogRecord):
-        """
-        Emit a record.
-
-        If a formatter is specified, it is used to format the record.
-        The record is then written to the stream with a trailing newline.  If
-        exception information is present, it is formatted using
-        traceback.print_exception and appended to the stream.  If the stream
-        has an 'encoding' attribute, it is used to determine how to do the
-        output to the stream.
-        """
-        
-        if str(record).replace("\n", "\\•\\") == str(self.last_record).replace("\n", "\\•\\"):
-            self.counter += 1
-            self.last_record = self.last_record or record
-            temp_record = copy.deepcopy(self.last_record)
-            temp_record.created = self.last_record.created
-            temp_record.msg += f" x{self.counter}"
-            self._write(temp_record, rewrite_line=True)
-            return
-
-        self._write(record, rewrite_line=False)
-        self.last_record = record
-        self.counter = 1
-
-
-# INFO WARN WARNING
-formats = [
-    "{asctime} - [{levelname}] {filename}:{funcName}:{lineno} {name} - {message}",
-    "{asctime} - [{levelname}] {filename}:{funcName}:{lineno} {name} - {message}",
-    "{asctime} - [{levelname}] {filename}:{lineno} {name} - {message}",
-    "{asctime} - {levelname}:{lineno}\t {name} - {message}",
-    "%(asctime)s - %(levelname)s (%(name)s) %(message)s",
-]
-
-FORMAT = formats[2]
+LOG_DIR = "logs"
 LOG_FILE = "log.log"
+
+IS_DEBUG = bool(sys.argv[1:] and "--debug" in sys.argv[1:])
+IS_LOUD = bool(sys.argv[1:] and "--loud" in sys.argv[1:])
+
 LEVEL = logging.INFO
-LEVEL_INFO = (
-    logging.DEBUG if sys.argv[1:] and sys.argv[1] == "--debug" else logging.INFO
+
+LEVEL_INFO = logging.DEBUG if IS_DEBUG else logging.INFO
+LEVEL_WARNING = logging.DEBUG if IS_DEBUG else logging.WARNING
+
+STREAM_LEVEL = LEVEL_INFO
+FILE_LEVEL = LEVEL_WARNING
+TEMPFILE_LEVEL = LEVEL_INFO
+
+if not os.path.exists(LOG_DIR):
+    os.mkdir(LOG_DIR)
+
+
+# TODO: show caller's caller modline instead caller's modline
+# (add param depth?)
+def my_callsite_processor(
+    inclide_filename=True, include_funcname=True, inclide_lineno=True
+):
+    def inner(logger, method_name, event_dict):
+        file_n, func_n, line_n = (
+            event_dict.pop("filename", ""),
+            event_dict.pop("func_name", ""),
+            event_dict.pop("lineno", ""),
+        )
+        array = []
+        if inclide_filename:
+            array.append(file_n)
+        if include_funcname:
+            array.append(func_n)
+        if inclide_lineno:
+            array.append(line_n)
+        args = tuple(array)
+        event_dict["modline"] = ":".join(str(i) for i in args)
+        return event_dict
+
+    return inner
+
+
+def filter_my_callsite_processor(blacklist: typing.Iterable = ()):
+    def inner(logger, method_name, event):
+        if any(logger.name.startswith(x) for x in blacklist):
+            event.pop("modline")
+        return event
+
+    return inner
+
+
+getLogger = structlog.stdlib.get_logger
+get_logger = getLogger
+
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.CallsiteParameterAdder(
+            [
+                structlog.processors.CallsiteParameter.FILENAME,
+                structlog.processors.CallsiteParameter.FUNC_NAME,
+                structlog.processors.CallsiteParameter.LINENO,
+            ],
+        ),
+        my_callsite_processor(include_funcname=False),
+        filter_my_callsite_processor(["aiogram", "pyrogram", "__main__"]),
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
 )
-LEVEL_WARNING = (
-    logging.DEBUG if sys.argv[1:] and sys.argv[1] == "--debug" else logging.WARNING
+
+stream_formatter = structlog.stdlib.ProcessorFormatter(
+    processors=[
+        structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+        structlog.dev.ConsoleRenderer(),
+    ],
 )
+
+file_formatter = structlog.stdlib.ProcessorFormatter(
+    processors=[
+        structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+        structlog.processors.JSONRenderer(),
+    ],
+)
+
+stream_handler = logging.StreamHandler()
+file_handler = logging.handlers.TimedRotatingFileHandler(
+    LOG_DIR + os.sep + LOG_FILE, encoding="utf-8", when="w0"
+)
+tempfile_handler = logging.FileHandler(
+    LOG_DIR + os.sep + "temp" + LOG_FILE, encoding="utf-8", mode="w"
+)
+
+stream_handler.setFormatter(stream_formatter)
+file_handler.setFormatter(file_formatter)
+tempfile_handler.setFormatter(file_formatter)
+
+stream_handler.setLevel(STREAM_LEVEL)
+file_handler.setLevel(FILE_LEVEL)
+tempfile_handler.setLevel(TEMPFILE_LEVEL)
 
 root_logger = logging.getLogger()
-logger = logging.getLogger(__name__)
+root_logger.setLevel(logging.DEBUG)
+root_logger.addHandler(stream_handler)
+root_logger.addHandler(file_handler)
+root_logger.addHandler(tempfile_handler)
+root_logger = structlog.wrap_logger(root_logger)
 
-stream_handler = MyStreamHandler()
-file_handler = MyFileHandler(LOG_FILE, encoding="utf-8")
-temp_file_handler = MyFileHandler("temp" + LOG_FILE, mode="w", encoding="utf-8")
+logger = structlog.get_logger(__name__)
 
-logging.basicConfig(
-    format=FORMAT,
-    level=LEVEL_INFO,
-    handlers=[
-        stream_handler,
-        temp_file_handler,
-        file_handler,
-    ],
-    style="{",
-)
+logger.debug("Started", custom_level=LEVEL)
+logger.info("Started", custom_level=LEVEL)
 
-root_logger.setLevel(LEVEL_INFO)
-stream_handler.setLevel(LEVEL_INFO)
-file_handler.setLevel(LEVEL_INFO)
-temp_file_handler.setLevel(LEVEL_INFO)
 
 MUTE_DICT: dict[str, int | str] = {
-    "httpcore": logging.WARNING,
-    "urllib3": logging.WARNING,
-    "asyncio": logging.INFO,
-    "httpx": logging.WARNING,
+    "aiosqlite": logging.INFO,
+    "pyrogram": logging.ERROR,
+    "pyrogram.crypto": logging.WARNING,
+    "urllib3": LEVEL_WARNING,
+    "asyncio": LEVEL_WARNING,
+    "aiogram_dialog": LEVEL_INFO,
+    "httpcore": LEVEL_WARNING,
+    "httpx": LEVEL_WARNING,
     "utils": LEVEL_INFO,
     "bots": LEVEL_INFO,
 }
 
-for _name, _value in MUTE_DICT.items():
-    _l = logging.getLogger(_name)
-    _l.setLevel(_value)
-
-
-if sys.argv[1:] and sys.argv[1] == "--debug":
-    logger.debug(f"Starting via debug")
+for name, level in MUTE_DICT.items():
+    logging.getLogger(name).setLevel(level)
