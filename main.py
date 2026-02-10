@@ -1,4 +1,5 @@
 from bots.vk_bot.main import main as vk_bot_main
+from bots.vk_bottle.main import main as vk_bottle_main
 from bots.telegram_bot.main import main as tg_bot_main
 from utils.config import OWNER_ID
 from utils.my_exceptions import handle_exception
@@ -17,7 +18,7 @@ async def checker(*tasks: asyncio.Task):
             if not task.done():
                 continue
             exception = task.exception()
-            if not exception or isinstance(exception, KeyboardInterrupt):
+            if not exception:
                 continue
             raise exception
         await asyncio.sleep(1)
@@ -26,11 +27,24 @@ async def checker(*tasks: asyncio.Task):
 async def main():
     wrap_loggers()
     # test()
-    if ("--telegram" not in sys.argv[1:]) and (
-        "--test" in sys.argv[1:] or "--vk" in sys.argv[1:]
-    ):
+    sys_args = sys.argv[1:]
+    task: asyncio.Task
+
+    only_telegram = "--telegram" in sys_args
+    is_test = "--test" in sys_args
+    is_vk = "--vk" in sys_args
+
+    via_vkbottle = "--vkbottle" in sys_args
+    run_only_vk = (not only_telegram) and (is_test or is_vk)
+    if run_only_vk and via_vkbottle:
+        logger.info("Стартует только ВК бот (через vkbottle)")
+        task = asyncio.create_task(vk_bottle_main(OWNER_ID))
+    elif run_only_vk:
         logger.info("Стартует только ВК бот")
         task = asyncio.create_task(vk_bot_main(OWNER_ID))
+    # elif via_vkbottle:
+    #     logger.info("Стартует ТГ бот (+vkbottle)")
+    #     task = asyncio.create_task(tg_bot_main())
     else:
         logger.info("Стартует ТГ бот")
         task = asyncio.create_task(tg_bot_main())

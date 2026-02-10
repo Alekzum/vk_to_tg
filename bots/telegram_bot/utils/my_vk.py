@@ -2,7 +2,7 @@ from utils.config import Config
 from utils.my_vk_api import AsyncVkApi, VkApiMethod
 import httpx, json
 from io import BytesIO
-# from vk_api import vk_api  # type: ignore
+# from vk_api import vk_api
 
 
 async def get_vk_api(user_id: int) -> VkApiMethod:

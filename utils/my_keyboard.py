@@ -62,7 +62,7 @@ def make_button_url(text: str, url: str) -> InlineKeyboardMarkup:
 
 
 def make_button(text: str, callback_data: str) -> InlineKeyboardMarkup:
-    # return InlineKeyboardBuilder().button(text=text, callback_data=callback_data).as_markup()  # type: ignore
+    # return InlineKeyboardBuilder().button(text=text, callback_data=callback_data).as_markup()
     return InlineKeyboardMarkup(
         inline_keyboard=[[InlineKeyboardButton(text=text, callback_data=callback_data)]]
     )
@@ -73,7 +73,7 @@ def make_row(*items: dict[str, str] | tuple[str, str]) -> InlineKeyboardMarkup:
     # for item in items:
     #     text, data = item
     #     builder = builder.button(text=text, callback_data=data)
-    # return builder.adjust(8).as_markup()  # type: ignore
+    # return builder.adjust(8).as_markup()
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -90,7 +90,7 @@ def make_column(*items: VALID_FIELD) -> InlineKeyboardMarkup:
     # for item in items:
     #     text, data = item
     #     builder = builder.button(text=text, callback_data=data)
-    # return builder.adjust(1).as_markup()  # type: ignore
+    # return builder.adjust(1).as_markup()
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text=text, callback_data=data)]
@@ -138,7 +138,7 @@ def make_button_thing(text: str, data: VALID_FIELD) -> InlineKeyboardMarkup:
     - switch_inline_query_current_chat
     - switch_inline_query_chosen_chat
     """
-    # return InlineKeyboardBuilder().button(text=text, **{x: y for (x, y) in getattr(data, "items", lambda: [data])()}).as_markup()  # type: ignore
+    # return InlineKeyboardBuilder().button(text=text, **{x: y for (x, y) in getattr(data, "items", lambda: [data])()}).as_markup()
     return InlineKeyboardMarkup(inline_keyboard=[[convert(text, data)]])
 
 
@@ -158,7 +158,7 @@ def make_row_thing(*items: INPUT_THING_FIELD) -> InlineKeyboardMarkup:
     #     builder = builder.button(
     #         text=text, **{x: y for (x, y) in getattr(data, "items", lambda: [data])()}
     #     )
-    # return builder.adjust(8).as_markup()  # type: ignore
+    # return builder.adjust(8).as_markup()
     return InlineKeyboardMarkup(
         inline_keyboard=[[convert(text, pair) for (text, pair) in items]]
     )
@@ -179,8 +179,8 @@ def make_column_thing(*items: INPUT_THING_FIELD) -> InlineKeyboardMarkup:
     #     text, data = item
     #     if data not in INPUT_DATA_NAME:
     #         raise ValueError(f"Excepted one of {INPUT_DATA_NAME}, not {data}!")
-    #     builder = builder.button(text=text, **{x: y for (x, y) in getattr(data, "items", lambda: [data])()})  # type: ignore
-    # return builder.adjust(1).as_markup()  # type: ignore
+    #     builder = builder.button(text=text, **{x: y for (x, y) in getattr(data, "items", lambda: [data])()})
+    # return builder.adjust(1).as_markup()
     return InlineKeyboardMarkup(
         inline_keyboard=[[convert(text, pair)] for (text, pair) in items]
     )
@@ -201,7 +201,7 @@ def make_keyboard_thing(*items: Sequence[INPUT_THING_FIELD]) -> InlineKeyboardMa
     #     temp = InlineKeyboardBuilder()
     #     for item in row:
     #         text, data = item
-    #         temp.button(text=text, **{x: y for (x, y) in getattr(data, "items", lambda: [data])()})  # type: ignore
+    #         temp.button(text=text, **{x: y for (x, y) in getattr(data, "items", lambda: [data])()})
     #     builder.row(*list(temp.buttons))
     # return builder.as_markup()
     return InlineKeyboardMarkup(

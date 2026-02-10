@@ -2,8 +2,8 @@ from utils.config import Config, OWNER_ID
 from utils.my_logging import getLogger
 from os import environ as ENVIRON
 from typing import overload, Any
-from pyrogram import Client, raw, types, enums  # type: ignore
-from cachetools import cached  # type: ignore
+from pyrogram.client import Client
+from pyrogram import raw, types, enums
 from dataclasses import dataclass
 import re
 
@@ -18,20 +18,22 @@ URL_RE = re.compile(
 )
 
 
-@cached(cache={})
+# @cached(cache={})
 @dataclass
 class MyTelegram:
     config: Config
     CHAT_ID: int
     tg: Client
 
-    def __init__(self, chat_id: int = OWNER_ID):
+    def __init__(
+        self, chat_id: int = OWNER_ID, name="PyrogramVkontakteToTelegramBot"
+    ):
         self.config = cfg = Config(chat_id)
 
         self.CHAT_ID = chat_id
         class_tg: Client | None = getattr(MyTelegram, "tg", None)
         self.tg = class_tg or Client(
-            name="PyrogramVkontakteToTelegramBot",
+            name=name,
             api_id=ENVIRON["API_ID"],
             api_hash=ENVIRON["API_HASH"],
             bot_token=cfg._BOT_TOKEN,
@@ -48,7 +50,7 @@ class MyTelegram:
             try:
                 if not is_authorized:
                     await tg.authorize()
-                await tg.invoke(raw.functions.updates.GetState())  # type: ignore
+                await tg.invoke(raw.functions.updates.get_state.GetState())
             except (Exception, KeyboardInterrupt):
                 await tg.disconnect()
                 raise
@@ -129,7 +131,7 @@ class MyTelegram:
             ),
         )
         if isinstance(msg, bool):
-            logger.error(f"{type(msg)=}!")
+            logger.error("Invalid message type", msg_type=type(msg))
             raise TypeError(f"{type(msg)=}!")
         return msg
 
@@ -141,5 +143,5 @@ class MyTelegram:
 
 def find_url(text: str, index: int = 0) -> str:
     matches = URL_RE.findall(text)
-    match = matches[index][0]
+    match = matches[index][0] if matches and len(matches) >= index - 1 else ""
     return match

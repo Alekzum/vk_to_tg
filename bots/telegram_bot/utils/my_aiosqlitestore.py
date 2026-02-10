@@ -6,16 +6,14 @@ from aiogram.fsm.storage.base import (
     KeyBuilder,
 )
 from aiogram.fsm.state import State
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Mapping
 
 import aiosqlite
 import sqlite3
 import pickle
 import json
 
-import structlog
 from utils.my_logging import getLogger
-import logging
 
 logger = getLogger(__name__)
 
@@ -111,7 +109,9 @@ class AioSQLStorage(BaseStorage):
 
         async with aiosqlite.connect(self._db_path) as con:
             cursor = await con.cursor()
-            await cursor.execute("SELECT state FROM fsm_data WHERE key = ?", (s_key,))
+            await cursor.execute(
+                "SELECT state FROM fsm_data WHERE key = ?", (s_key,)
+            )
             s_state = await cursor.fetchone()
 
         if s_state and len(s_state) > 0:
@@ -119,7 +119,7 @@ class AioSQLStorage(BaseStorage):
         else:
             return None
 
-    async def set_data(self, key: StorageKey, data: Dict[str, Any]) -> None:
+    async def set_data(self, key: StorageKey, data: Mapping[str, Any]) -> None:
         """
         Write data (replace)
 
@@ -148,7 +148,9 @@ class AioSQLStorage(BaseStorage):
 
         async with aiosqlite.connect(self._db_path) as con:
             cursor = await con.cursor()
-            await cursor.execute("SELECT data FROM fsm_data WHERE key = ?", (s_key,))
+            await cursor.execute(
+                "SELECT data FROM fsm_data WHERE key = ?", (s_key,)
+            )
             s_data = await cursor.fetchone()
         if s_data is None:
             return {}

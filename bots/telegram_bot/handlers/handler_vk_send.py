@@ -1,6 +1,6 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
-from aiogram_dialog import Dialog, Window, DialogManager, StartMode
+from aiogram_dialog import Dialog, Window, DialogManager
 from aiogram_dialog.widgets.text import Const, Format, Multi
 from aiogram_dialog.widgets.kbd import (
     Back,
@@ -10,7 +10,6 @@ from aiogram_dialog.widgets.kbd import (
     ScrollingGroup,
     SwitchTo,
 )
-from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.api.entities import ChatEvent
 from aiogram_dialog.widgets.common import ManagedScroll
 
@@ -27,9 +26,7 @@ from ..utils.fsm_states import BotStates
 from .handler_vk import CHATS_PAGE_LEN, maybe_inputs
 from typing import Any
 import operator
-import structlog
 from utils.my_logging import getLogger
-import logging
 import asyncio
 from io import BytesIO
 
@@ -40,24 +37,26 @@ rt = Router(name=__name__)
 async def get_start_data(event: ChatEvent, dialog_manager: DialogManager):
     start_data = dialog_manager.start_data
     if not isinstance(start_data, dict):
-        logger.warning(f"Start data invalid! {type(start_data)=}")
+        logger.warning("Start data invalid!", start_data_type=type(start_data))
         return
     dialog_manager.dialog_data.update(start_data)
 
 
-async def on_send_message(dialog_manager: DialogManager, **kwargs) -> dict[str, str]:
+async def on_send_message(
+    dialog_manager: DialogManager, **kwargs
+) -> dict[str, str]:
     user = dialog_manager.event.from_user
     if not user:
-        logger.error(f"Didn't found user!")
+        logger.error("Didn't found user!")
         return dict(msg_text="*НЕИЗВЕСТНО*", msg_chat="*НЕИЗВЕСТНО*")
 
     api = await get_vk_api(user.id)
-    # print(f"{dialog_manager.dialog_data=}")
+    # print("dialog_data", dialog_manager_dialog_data=dialog_manager.dialog_data)
     photo = dialog_manager.dialog_data.get("msg_photo", None)
     text = dialog_manager.dialog_data["msg_text"]
     chat_name = dialog_manager.dialog_data["msg_name"]
     result = dict(msg_text=text, msg_chat=chat_name)
-    
+
     if photo:
         result["msg_photo"] = photo
 
@@ -70,6 +69,7 @@ async def on_send_message(dialog_manager: DialogManager, **kwargs) -> dict[str, 
     message_text = (await get_text_message(rtm_vk, api, 0))[0]
     result["msg_message"] = message_text
     return result
+
 
 # Chats: confirm
 
@@ -101,7 +101,6 @@ async def send_confirm(
     msg_vk_id = dialog_data["msg_to"]
     chat_vk_id = dialog_data["msg_in"]
 
-
     tg_user_id = callback.from_user.id
     api = await get_vk_api(tg_user_id)
 
@@ -109,7 +108,9 @@ async def send_confirm(
     if action == "reply":
         if msg_vk_id is None:
             return await callback.answer("Я не знаю такое сообщение.")
-        raw_msg = (await api.messages.getById(message_ids=msg_vk_id))["items"][0]
+        raw_msg = (await api.messages.getById(message_ids=msg_vk_id))["items"][
+            0
+        ]
         vk_msg = VkMessage(**raw_msg)
 
         send_kwargs.update(
@@ -145,14 +146,16 @@ async def send_confirm(
             attachments = []
             for photo in photos:
                 b_io = BytesIO()
-                
+
                 photo_ = await callback.bot.download(photo, destination=b_io)
                 if not photo_:
                     raise RuntimeError
                 photo_id = await upload_photo(photo=b_io, tg_user_id=tg_user_id)
                 attachments.append(photo_id)
-        
-            send_kwargs.update(dict(attachment=",".join(attachments), message=text))
+
+            send_kwargs.update(
+                dict(attachment=",".join(attachments), message=text)
+            )
 
         case _:
             raise NotImplementedError
@@ -173,14 +176,24 @@ async def send_cancel(
 
 # Select chat
 async def on_chat_selected(
-    callback: CallbackQuery, widget: Any, dialog_manager: DialogManager, item_id: int
+    callback: CallbackQuery,
+    widget: Any,
+    dialog_manager: DialogManager,
+    item_id: int,
 ):
     user_id = callback.from_user.id
-    logger.debug(f"{user_id=}, selected chat {item_id=}")
+    # logger.debug("selected chat", user_id=user_id, item_id=item_id)
     chats_list = dialog_manager.dialog_data["vk_chat_list_data"]
-    chats_dict: dict[int, tuple[str, int]] = {p[0]: (p[1], p[2]) for p in chats_list}
+    chats_dict: dict[int, tuple[str, int]] = {
+        p[0]: (p[1], p[2]) for p in chats_list
+    }
     selected_chat = chats_dict[item_id]
-    logger.debug(f"{user_id=}, {selected_chat=}")
+    logger.debug(
+        "selected chat",
+        user_id=user_id,
+        item_id=item_id,
+        selected_chat=selected_chat,
+    )
 
     selected_chat_id = selected_chat[1]
     selected_chat_name = selected_chat[0]
@@ -206,7 +219,9 @@ async def async_parse_chats(
             peer_id = chat.conversation.peer.id
             peer_type = chat.conversation.peer.type
             task = group.create_task(
-                get_dialog_name(dialog_id=peer_id, api=api, dialog_type=peer_type)
+                get_dialog_name(
+                    dialog_id=peer_id, api=api, dialog_type=peer_type
+                )
             )
             task.add_done_callback(
                 (
@@ -266,7 +281,9 @@ async def on_choose_chat(
         return {"chats": []}
 
     offset = dialog_manager.dialog_data.get("vk_chat_list_offset", 0)
-    raw_chats_: dict = dialog_manager.dialog_data.get("vk_chat_conversations", {})
+    raw_chats_: dict = dialog_manager.dialog_data.get(
+        "vk_chat_conversations", {}
+    )
 
     dialog_manager.dialog_data["vk_chat_conversations"] = raw_chats_
     raw_chats = raw_chats_.get(offset, None)
@@ -275,23 +292,21 @@ async def on_choose_chat(
     api = await get_vk_api(user_id)
 
     if not raw_chats:
-        logger.debug(f"{user_id=}, get chats")
-
-        # if raw_chats is None:
-        # logger.debug(f"{user_id=}, saving raw chats")
+        logger.debug("get chats", user_id=user_id)
         response = await api.messages.getConversations(
             offset=offset, count=CHATS_PAGE_LEN
         )
         raw_chats = GetConversations(response=response)
         dialog_manager.dialog_data["vk_chat_conversations"][offset] = raw_chats
 
-    # logger.debug(f"{user_id=}, saving some inner data + parsing chats")
     dialog_manager.dialog_data["vk_chat_list_offset"] = offset
 
     chats_list = await async_parse_chats(api, raw_chats, offset)
 
     dialog_manager.dialog_data["vk_chat_list_data"] = chats_list
-    logger.debug(f"{user_id=}, return chats, {len(chats_list)=}")
+    logger.debug(
+        "return chats", user_id=user_id, chats_list_len=len(chats_list)
+    )
     return {"chats": chats_list}
 
 

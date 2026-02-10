@@ -80,7 +80,7 @@ async def error_handler(error: ErrorEvent, bot: Bot):
     error_str = "".join(traceback.format_exception(error.exception, limit=3))
     for chunk in [error_str[i*4096:(i+1)*4096] for i in range(len(error_str)//4096)]:
         await bot.send_message(OWNER_ID, escape(chunk))
-    # logger.error(f"{error.exception=}")
+    # logger.error("exception", error_exception=error.exception)
 
 
 # @rt.error

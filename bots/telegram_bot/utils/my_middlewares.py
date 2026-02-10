@@ -1,6 +1,6 @@
-from typing import Callable, Dict, Any, Awaitable, Union, TypedDict, override
+from typing import Callable, Dict, Any, Awaitable, TypedDict, override
 from aiogram import BaseMiddleware
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import CallbackQuery, TelegramObject, User, Chat
 import time
 
 
@@ -50,22 +50,23 @@ class CooldownMiddleware(BaseMiddleware):
     @override
     async def __call__(
         self,
-        handler: Callable[
-            [Union[Message, CallbackQuery], Dict[str, Any]], Awaitable[Any]
-        ],
-        event: Union[Message, CallbackQuery],  # type: ignore[override]
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
-        if event.from_user is not None:
-            uid = event.from_user.id  # type: ignore[union-attr]
-            language_code = event.from_user.language_code or "en"
+        from_user: User | None = getattr(event, "from_user", None)
+        sender_chat: Chat | None = getattr(event, "from_user", None)
+        if from_user is not None:
+            uid = from_user.id
+            language_code = from_user.language_code or "en"
 
-        elif event.sender_chat is not None:
-            uid = event.sender_chat.id
+        elif sender_chat is not None:
+            uid = sender_chat.id
             language_code = "en"
 
         else:
-            return await handler(event, data)
+            raise RuntimeError("Unknown sender for event!", event)
+            # return await handler(event, data)
 
         translation_table = translations.get(language_code, translations["en"])
 
@@ -84,7 +85,9 @@ class CooldownMiddleware(BaseMiddleware):
 
             too_fast_message = too_fast_message_raw.format(
                 remain_time=remain_time,
-                unit_string=unit_string.get(remains_last_d, unit_string["default"]),
+                unit_string=unit_string.get(
+                    remains_last_d, unit_string["default"]
+                ),
             )
             await event.answer(too_fast_message)
             return

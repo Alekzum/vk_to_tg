@@ -39,8 +39,12 @@ async def edit_message():
     pass
 
 
-@rt.callback_query(F.data.startswith("read") & F.data.split(":")[1:].as_("data"))
-async def read_message(callback_query: CallbackQuery, bot: Bot, data: list[str]):
+@rt.callback_query(
+    F.data.startswith("read") & F.data.split(":")[1:].as_("data")
+)
+async def read_message(
+    callback_query: CallbackQuery, bot: Bot, data: list[str]
+):
     async def answer(text):
         await callback_query.answer(text)
         if callback_query.message:
@@ -70,7 +74,9 @@ async def read_message(callback_query: CallbackQuery, bot: Bot, data: list[str])
 
     vk_messages = await api.messages.getById(message_ids=msg_id)
 
-    vk_message: dict | None = vk_messages["items"][0] if vk_messages["items"] else None
+    vk_message: dict | None = (
+        vk_messages["items"][0] if vk_messages["items"] else None
+    )
     if not vk_message:
         if isinstance(callback_query.message, Message):
             await callback_query.message.edit_reply_markup()
@@ -93,11 +99,19 @@ async def start_polls(bot: Bot):
 
     users = await get_users()
     for user in users:
-        logger.debug(f"{user.polling_state=}", user_id=user.tg_id)
+        logger.debug(
+            "polling_state",
+            user_polling_state=user.polling_state,
+            user_id=user.tg_id,
+        )
         if user.polling_state:
-            logger.info("starting polling from start_pools", user_id=user.tg_id)
-            msg = await bot.send_message(user.tg_id, "Начато получение сообщений...")
-            task = create_task_helper(main(user.tg_id), name=f"polling_{user.tg_id}")
+            logger.info("starting polling...", user_id=user.tg_id)
+            msg = await bot.send_message(
+                user.tg_id, "Начато получение сообщений..."
+            )
+            task = create_task_helper(
+                main(user.tg_id), name=f"polling_{user.tg_id}"
+            )
             tasks[user.tg_id] = task
             await msg.delete()
 
@@ -115,7 +129,7 @@ async def stop_polls(bot: Bot):
     for task in tasks.values():
         task.cancel("stopping bot...")
 
-    await asyncio.gather(*tasks.values())
+    await asyncio.gather(*tasks.values(), return_exceptions=False)
 
     # for user in users:
     #     await set_polling_state(user.tg_id, user.polling_state)
@@ -139,7 +153,9 @@ async def on_menu(dialog_manager: DialogManager, bot: Bot, *args, **kwargs):
     if polling_state:
         task = tasks[user.id]
 
-        msg = await bot.send_message(user.id, "Останавливаем получение сообщений...")
+        msg = await bot.send_message(
+            user.id, "Останавливаем получение сообщений..."
+        )
         task.cancel("Stopping bot...")
         await set_polling_state(user.id, False)
         with suppress(asyncio.CancelledError):
@@ -162,24 +178,12 @@ async def on_start_polling(dialog_manager: DialogManager, *args, **kwargs):
     if not polling_state:
         from bots.vk_bot.main import main
 
-        task = create_task_helper(main(user.id))  # type: ignore
+        task = create_task_helper(main(user.id))
         tasks[user.id] = task
         await set_polling_state(user.id, True)
 
         return dict(message="Получение сообщений начато")
     return dict(message="Получение сообщений уже идёт")
-
-
-# async def choose_chat(
-#     msg: Message, message_input: MessageInput, dialog_manager: DialogManager
-# ):
-#     usr = msg.from_user
-#     logger.debug(f"choose_chat", user_id={usr and usr.id})
-#     dialog_manager.dialog_data["msg_text"] = get_tg_msg_text(msg)
-#     await dialog_manager.start(
-#         BotStates.Answer.CHOOSE_CHAT, data=dict(reply_text=get_tg_msg_text(msg))
-#     )
-#     # await msg.answer("Надо отправить с ответом на сообщение.")
 
 
 # TODO: combine reply and send segments
@@ -267,7 +271,9 @@ async def maybe_send_photo(  # IDK ABOUT THIS.
     if dialog_manager.dialog_data["msg_act"] != "send":
         raise RuntimeError
 
-    await dialog_manager.start(BotStates.Answer.MAYBE_CHOOSE_CHAT, data=msg_data)
+    await dialog_manager.start(
+        BotStates.Answer.MAYBE_CHOOSE_CHAT, data=msg_data
+    )
 
 
 async def maybe_send_text(
@@ -283,14 +289,18 @@ async def maybe_send_text(
     )
     dialog_manager.dialog_data.update(msg_data)
 
-    await dialog_manager.start(BotStates.Answer.MAYBE_CHOOSE_CHAT, data=msg_data)
+    await dialog_manager.start(
+        BotStates.Answer.MAYBE_CHOOSE_CHAT, data=msg_data
+    )
 
 
 maybe_inputs = (
     MessageInput(
         maybe_reply_photo, filter=F.reply_to_message.from_user.is_bot & F.photo
     ),
-    MessageInput(maybe_reply_text, filter=F.reply_to_message.from_user.is_bot & F.text),
+    MessageInput(
+        maybe_reply_text, filter=F.reply_to_message.from_user.is_bot & F.text
+    ),
     MessageInput(maybe_send_photo, filter=~F.reply_to_message & F.photo),
     MessageInput(maybe_send_text, filter=~F.reply_to_message & F.text),
 )

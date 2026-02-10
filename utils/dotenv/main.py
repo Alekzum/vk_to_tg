@@ -242,11 +242,11 @@ def resolve_variables(
             atoms = parse_variables(value)
             env: Dict[str, Optional[str]] = {}
             if override:
-                env.update(os.environ)  # type: ignore
+                env.update(os.environ)
                 env.update(new_values)
             else:
                 env.update(new_values)
-                env.update(os.environ)  # type: ignore
+                env.update(os.environ)
             result = "".join(atom.resolve(env) for atom in atoms)
 
         new_values[name] = result

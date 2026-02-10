@@ -8,9 +8,7 @@
 
 import json
 import random
-import structlog
 from utils.my_logging import getLogger
-import logging
 import re
 import time
 import httpx
@@ -19,20 +17,19 @@ import urllib.parse
 from hashlib import md5
 from collections import defaultdict
 
-import jconfig  # type: ignore[import-untyped]
-from vk_api.longpoll import Event, VkEventType, DEFAULT_MODE, VkLongpollMode  # type: ignore[import-untyped]
-from vk_api.enums import VkUserPermissions  # type: ignore[import-untyped]
-from vk_api.exceptions import *  # type: ignore[import-untyped]
-from vk_api.exceptions import ApiError, CAPTCHA_ERROR_CODE, Captcha, ApiHttpError  # type: ignore[import-untyped]
-from vk_api.utils import (  # type: ignore[import-untyped]
+import jconfig
+from vk_api.longpoll import Event, VkEventType, DEFAULT_MODE, VkLongpollMode
+from vk_api.enums import VkUserPermissions
+
+# from vk_api.exceptions import *
+from vk_api import exceptions
+from vk_api.utils import (
     code_from_number,
     search_re,
     clear_string,
     cookies_to_list,
     set_cookies_from_list,
 )
-
-from vk_api.exceptions import TwoFactorError, TWOFACTOR_CODE
 
 RE_LOGIN_TO = re.compile(r'"to":"(.*?)"')
 RE_LOGIN_IP_H = re.compile(r'name="ip_h" value="([a-z0-9]+)"')
@@ -47,7 +44,9 @@ RE_TOKEN_URL = re.compile(r'location\.href = "(.*?)"\+addr;')
 RE_PHONE_PREFIX = re.compile(r'label ta_r">\+(.*?)<')
 RE_PHONE_POSTFIX = re.compile(r'phone_postfix">.*?(\d+).*?<')
 
-DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"
+DEFAULT_USERAGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"
+)
 
 DEFAULT_USER_SCOPE = sum(VkUserPermissions)
 
@@ -97,7 +96,7 @@ class AsyncVkApi(object):
         авторизации приложения (https://vk.com/dev/client_cred_flow).
         Внимание: Этот способ авторизации устарел, рекомендуется использовать
         сервисный ключ из настроек приложения.
-    
+
 
     `login` и `password` необходимы для автоматического получения токена при помощи
     Implicit Flow авторизации пользователя и возможности работы с веб-версией сайта
@@ -125,7 +124,6 @@ class AsyncVkApi(object):
         session=None,
         async_session=None,
     ):
-
         self.login = login
         self.password = password
 
@@ -147,10 +145,11 @@ class AsyncVkApi(object):
         self.last_request = 0.0
 
         self.error_handlers = {
-            NEED_VALIDATION_CODE: self.need_validation_handler,
-            CAPTCHA_ERROR_CODE: captcha_handler or self.captcha_handler,
-            TOO_MANY_RPS_CODE: self.too_many_rps_handler,
-            TWOFACTOR_CODE: auth_handler or self.auth_handler,
+            exceptions.NEED_VALIDATION_CODE: self.need_validation_handler,
+            exceptions.CAPTCHA_ERROR_CODE: captcha_handler
+            or self.captcha_handler,
+            exceptions.TOO_MANY_RPS_CODE: self.too_many_rps_handler,
+            exceptions.TWOFACTOR_CODE: auth_handler or self.auth_handler,
         }
 
         self.lock = asyncio.Lock()
@@ -190,11 +189,13 @@ class AsyncVkApi(object):
         """
 
         if not self.login:
-            raise LoginRequired("Login is required to auth")
+            raise exceptions.LoginRequired("Login is required to auth")
 
         self.logger.info("Auth with login: {}".format(self.login))
 
-        set_cookies_from_list(self.http.cookies, self.storage.setdefault("cookies", []))
+        set_cookies_from_list(
+            self.http.cookies, self.storage.setdefault("cookies", [])
+        )
 
         self.token = (
             self.storage.setdefault("token", {})
@@ -203,23 +204,24 @@ class AsyncVkApi(object):
         )
 
         if token_only:
-            await self._auth_token(reauth=reauth)  # type: ignore
+            await self._auth_token(reauth=reauth)
         else:
-            await self._auth_cookies(reauth=reauth)  # type: ignore
+            await self._auth_cookies(reauth=reauth)
 
     async def _auth_cookies(self, reauth=False):
-
         if reauth:
             self.logger.info("Auth forced")
 
             self.storage.clear_section()
 
             await self._vk_login()
-            await self._api_login()  # type: ignore
+            await self._api_login()
             return
 
         if not self.check_sid():
-            self.logger.info("remixsid from config is not valid: {}".format(self._sid))
+            self.logger.info(
+                "remixsid from config is not valid: {}".format(self._sid)
+            )
 
             await self._vk_login()
         else:
@@ -230,12 +232,11 @@ class AsyncVkApi(object):
                 "access_token from config is not valid: {}".format(self.token)
             )
 
-            await self._api_login()  # type: ignore
+            await self._api_login()
         else:
             self.logger.info("access_token from config is valid")
 
     async def _auth_token(self, reauth=False):
-
         if not reauth and await self._check_token():
             self.logger.info("access_token from config is valid")
             return
@@ -245,11 +246,11 @@ class AsyncVkApi(object):
 
         if self.check_sid():
             await self._pass_security_check()
-            await self._api_login()  # type: ignore
+            await self._api_login()
 
         elif self.password:
             await self._vk_login()
-            await self._api_login()  # type: ignore
+            await self._api_login()
 
     async def _vk_login(self, captcha_sid=None, captcha_key=None):
         """Авторизация ВКонтакте с получением cookies remixsid
@@ -264,7 +265,7 @@ class AsyncVkApi(object):
         self.logger.info("Logging in...")
 
         if not self.password:
-            raise PasswordRequired("Password is required to login")
+            raise exceptions.PasswordRequired("Password is required to login")
 
         self.http.cookies.clear()
 
@@ -272,7 +273,9 @@ class AsyncVkApi(object):
         response = await self.http.get("https://vk.com/login")
 
         if str(response.url).startswith("https://vk.com/429.html?"):
-            hash429_md5 = md5(self.http.cookies["hash429"].encode("ascii")).hexdigest()
+            hash429_md5 = md5(
+                self.http.cookies["hash429"].encode("ascii")
+            ).hexdigest()
             self.http.cookies.pop("hash429")
             response = await self.http.get(f"{response.url}&key={hash429_md5}")
 
@@ -317,20 +320,20 @@ class AsyncVkApi(object):
             self.logger.info("Captcha code is required")
 
             captcha_sid = search_re(RE_CAPTCHAID, response.text)
-            captcha = Captcha(self, captcha_sid, self._vk_login)
+            captcha = exceptions.Captcha(self, captcha_sid, self._vk_login)
 
-            return self.error_handlers[CAPTCHA_ERROR_CODE](captcha)
+            return self.error_handlers[exceptions.CAPTCHA_ERROR_CODE](captcha)
 
         if "onLoginReCaptcha(" in response.text:
             self.logger.info("Captcha code is required (recaptcha)")
 
             captcha_sid = str(random.random())[2:16]
-            captcha = Captcha(self, captcha_sid, self._vk_login)
+            captcha = exceptions.Captcha(self, captcha_sid, self._vk_login)
 
-            return self.error_handlers[CAPTCHA_ERROR_CODE](captcha)
+            return self.error_handlers[exceptions.CAPTCHA_ERROR_CODE](captcha)
 
         if "onLoginFailed(4" in response.text:
-            raise BadPassword("Bad password")
+            raise exceptions.BadPassword("Bad password")
 
         if "act=authcheck" in response.text:
             self.logger.info("2FA is required")
@@ -345,12 +348,12 @@ class AsyncVkApi(object):
             self.storage.cookies = cookies_to_list(self.http.cookies)
             self.storage.save()
         else:
-            raise AuthError(get_unknown_exc_str("AUTH; no sid"))
+            raise exceptions.AuthError(get_unknown_exc_str("AUTH; no sid"))
 
         response = await self._pass_security_check(response)
 
         if "act=blocked" in str(response.url):
-            raise AccountBlocked("Account is blocked")
+            raise exceptions.AccountBlocked("Account is blocked")
 
     async def _pass_twofactor(self, auth_response: httpx.Response):
         """Двухфакторная аутентификация
@@ -361,9 +364,9 @@ class AsyncVkApi(object):
         auth_hash = search_re(RE_AUTH_HASH, auth_response.text)
 
         if not auth_hash:
-            raise TwoFactorError(get_unknown_exc_str("2FA; no hash"))
+            raise exceptions.TwoFactorError(get_unknown_exc_str("2FA; no hash"))
 
-        code, remember_device = self.error_handlers[TWOFACTOR_CODE]()
+        code, remember_device = self.error_handlers[exceptions.TWOFACTOR_CODE]()
 
         values = {
             "al": "1",
@@ -383,12 +386,14 @@ class AsyncVkApi(object):
             return await self.http.get(path)
 
         elif status in [0, "8"]:  # Incorrect code
-            return await self._pass_twofactor(auth_response)  # type: ignore
+            return await self._pass_twofactor(auth_response)
 
         elif status == "2":
-            raise TwoFactorError("Recaptcha required")
+            raise exceptions.TwoFactorError("Recaptcha required")
 
-        raise TwoFactorError(get_unknown_exc_str("2FA; unknown status"))
+        raise exceptions.TwoFactorError(
+            get_unknown_exc_str("2FA; unknown status")
+        )
 
     async def _pass_security_check(self, response=None):
         """Функция для обхода проверки безопасности (запрос номера телефона)
@@ -424,15 +429,17 @@ class AsyncVkApi(object):
                 "to": "",
             }
 
-            response = await self.http.post("https://vk.com/login.php", params=values)
+            response = await self.http.post(
+                "https://vk.com/login.php", params=values
+            )
 
             if response.text.split("<!>")[4] == "4":
                 return response
 
         if phone_prefix and phone_postfix:
-            raise SecurityCheck(phone_prefix, phone_postfix)
+            raise exceptions.SecurityCheck(phone_prefix, phone_postfix)
 
-        raise SecurityCheck(response=response)
+        raise exceptions.SecurityCheck(response=response)
 
     async def check_sid(self):
         """Проверка Cookies remixsid на валидность"""
@@ -455,10 +462,10 @@ class AsyncVkApi(object):
         """Получение токена через Desktop приложение"""
 
         if not self._sid:
-            raise AuthError("API auth error (no remixsid)")
+            raise exceptions.AuthError("API auth error (no remixsid)")
 
         if not self.http.cookies.get("p", domain=".login.vk.com"):
-            raise AuthError("API auth error (no login cookies)")
+            raise exceptions.AuthError("API auth error (no login cookies)")
 
         response = await self.http.get(
             "https://oauth.vk.com/authorize",
@@ -470,7 +477,7 @@ class AsyncVkApi(object):
         )
 
         if "act=blocked" in str(response.url):
-            raise AccountBlocked("Account is blocked")
+            raise exceptions.AccountBlocked("Account is blocked")
 
         if "access_token" not in str(response.url):
             url = search_re(RE_TOKEN_URL, response.text)
@@ -495,7 +502,9 @@ class AsyncVkApi(object):
             token = {k: v[0] for k, v in parsed_query.items()}
 
             if not isinstance(token.get("access_token"), str):
-                raise AuthError(get_unknown_exc_str("API AUTH; no access_token"))
+                raise exceptions.AuthError(
+                    get_unknown_exc_str("API AUTH; no access_token")
+                )
 
             self.token = token
 
@@ -516,10 +525,10 @@ class AsyncVkApi(object):
             if error_text and "@vk.com" in error_text:
                 error_text = error_data.get("error")
 
-            raise AuthError("API auth error: {}".format(error_text))
+            raise exceptions.AuthError("API auth error: {}".format(error_text))
 
         else:
-            raise AuthError("Unknown API auth error")
+            raise exceptions.AuthError("Unknown API auth error")
 
     async def server_auth(self):
         """Серверная авторизация"""
@@ -531,11 +540,13 @@ class AsyncVkApi(object):
         }
 
         response = (
-            await self.http.post("https://oauth.vk.com/access_token", params=values)
+            await self.http.post(
+                "https://oauth.vk.com/access_token", params=values
+            )
         ).json()
 
         if "error" in response:
-            raise AuthError(response["error_description"])
+            raise exceptions.AuthError(response["error_description"])
         else:
             self.token = response
 
@@ -550,11 +561,13 @@ class AsyncVkApi(object):
         }
 
         response = (
-            await self.http.post("https://oauth.vk.com/access_token", params=values)
+            await self.http.post(
+                "https://oauth.vk.com/access_token", params=values
+            )
         ).json()
 
         if "error" in response:
-            raise AuthError(response["error_description"])
+            raise exceptions.AuthError(response["error_description"])
         else:
             self.token = response
         return response
@@ -565,7 +578,7 @@ class AsyncVkApi(object):
         if self.token:
             try:
                 await self.method("stats.trackVisitor")
-            except ApiError:
+            except exceptions.ApiError:
                 return False
 
             return True
@@ -610,7 +623,7 @@ class AsyncVkApi(object):
     async def auth_handler(self):
         """Обработчик двухфакторной аутентификации"""
 
-        raise AuthError("No handler for two-factor authentication")
+        raise exceptions.AuthError("No handler for two-factor authentication")
 
     def get_api(self):
         """Возвращает VkApiMethod(self)
@@ -679,7 +692,7 @@ class AsyncVkApi(object):
         if response.status_code == 200:
             response = response.json()
         else:
-            error = ApiHttpError(self, method, values, raw, response)
+            error = exceptions.ApiHttpError(self, method, values, raw, response)
             response = await self.http_handler(error)
 
             if response is not None:
@@ -688,11 +701,13 @@ class AsyncVkApi(object):
             raise error
 
         if "error" in response:
-            error = ApiError(self, method, values, raw, response["error"])
+            error = exceptions.ApiError(
+                self, method, values, raw, response["error"]
+            )
 
             if error.code in self.error_handlers:
-                if error.code == CAPTCHA_ERROR_CODE:
-                    error = Captcha(
+                if error.code == exceptions.CAPTCHA_ERROR_CODE:
+                    error = exceptions.Captcha(
                         self,
                         error.error["captcha_sid"],
                         self.method,
@@ -748,7 +763,7 @@ class VkApiMethod(object):
             if isinstance(v, (list, tuple)):
                 kwargs[k] = ",".join(str(x) for x in v)
 
-        return await self._vk.method(self._method, kwargs)  # type: ignore
+        return await self._vk.method(self._method, kwargs)
 
 
 class AsyncVkLongPoll(object):
@@ -816,12 +831,14 @@ class AsyncVkLongPoll(object):
         if self.group_id:
             values["group_id"] = self.group_id
 
-        response: dict = await self.vk.method("messages.getLongPollServer", values)
+        response: dict = await self.vk.method(
+            "messages.getLongPollServer", values
+        )
 
         self.key = response["key"]
         self.server = response["server"]
 
-        self.url = "https://" + self.server  # type: ignore
+        self.url = "https://" + self.server
 
         if update_ts:
             self.ts = response["ts"]
@@ -833,6 +850,9 @@ class AsyncVkLongPoll(object):
 
         :returns: `list` of :class:`Event`
         """
+        if self.url is None:
+            raise ValueError("self.url is None")
+
         values = {
             "act": "a_check",
             "key": self.key,
@@ -844,7 +864,9 @@ class AsyncVkLongPoll(object):
 
         response = (
             await self.session.get(
-                self.url, params=values, timeout=self.wait + 10  # type: ignore
+                self.url,
+                params=values,
+                timeout=self.wait + 10,
             )
         ).json()
 
@@ -889,13 +911,14 @@ class AsyncVkLongPoll(object):
         for event in events:
             if event.type in self.PRELOAD_MESSAGE_EVENTS:
                 message_ids.add(event.message_id)
-                event_by_message_id[event.message_id].append(event)  # type: ignore[reportArgumentType]
+                event_by_message_id[event.message_id].append(event)
 
         if not message_ids:
             return
 
         messages_data = await self.vk.method(
-            "messages.getById", {"message_ids": ",".join(str(i) for i in message_ids)}
+            "messages.getById",
+            {"message_ids": ",".join(str(i) for i in message_ids)},
         )
 
         for message in messages_data["items"]:

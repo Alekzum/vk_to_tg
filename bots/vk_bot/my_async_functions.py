@@ -3,15 +3,12 @@ from utils.my_vk_api import VkApiMethod
 from .classes import Message, Attachment, ForwardMessage, ReplyMessage
 from .classes.messages import MessageAction, MessageActionType
 from .utils import get_message_url
-from vk_api.longpoll import Event  # type: ignore[import-untyped]
-from vk_api.exceptions import ApiError  # type: ignore[import-untyped]
+from vk_api.longpoll import Event
+from vk_api.exceptions import ApiError
 from abc import abstractmethod
 from typing import Callable, Awaitable, Literal, Any, overload
 from pydantic import BaseModel, Field
-from urllib.parse import quote
-import structlog
 from utils.my_logging import getLogger
-import logging
 import pathlib
 import pickle
 
@@ -29,7 +26,9 @@ class MemoryCache(BaseModel):
     @abstractmethod
     async def get(self, api: VkApiMethod, id: int) -> str: ...
     @abstractmethod
-    async def update_info(self, api: VkApiMethod, id: int) -> tuple[bool, str]: ...
+    async def update_info(
+        self, api: VkApiMethod, id: int
+    ) -> tuple[bool, str]: ...
 
 
 class CacheLambda(MemoryCache):
@@ -47,7 +46,9 @@ class CacheLambda(MemoryCache):
         try:
             raw_info = await api._vk.method(self.api_method, values=kwargs)
             logger.debug(f"{self.api_method=}, {id=}, {raw_info=}")
-            checked_info = raw_info[0] if isinstance(raw_info, list) else raw_info
+            checked_info = (
+                raw_info[0] if isinstance(raw_info, list) else raw_info
+            )
             info = self.result_parser(checked_info)
             self.update(id=id, name=info, TTL=5)
             return True, info
@@ -84,7 +85,9 @@ class CacheLambda(MemoryCache):
                 )
                 return temp
             except Exception as ex:
-                logger.error(f"{id=}, {self.api_method=}, {self.api_args(id)=}, {ex=}")
+                logger.error(
+                    f"{id=}, {self.api_method=}, {self.api_args(id)=}, {ex=}"
+                )
                 raise ex
         self.update(id=id, name=item.name, TTL=item.TTL - 1)
         return item.name
@@ -107,7 +110,9 @@ class Caches(BaseModel):
                 items=dict(),
                 api_method="users.get",
                 api_args=lambda id: dict(user_ids=id),
-                result_parser=lambda d: " ".join([d["first_name"], d["last_name"]]),
+                result_parser=lambda d: " ".join(
+                    [d["first_name"], d["last_name"]]
+                ),
             ),
             group_cache=CacheLambda(
                 items=dict(),
@@ -205,11 +210,12 @@ async def action_to_string(action: MessageAction, api: VkApiMethod) -> str:
         return f"Изменил название беседы на «{_action.text}»"
 
     async def chat_invite_user(_action: MessageAction, _api: VkApiMethod):
-        # assert _action == MessageActionType()
-        return f"Приглашен {_action.email or await get_user_name(_api, _action.member_id)}"  # type: ignore[arg-type]
+        assert _action.member_id is not None
+        return f"Приглашен {_action.email or await get_user_name(_api, _action.member_id)}"
 
     async def chat_kick_user(_action: MessageAction, _api: VkApiMethod):
-        return f"Выгнан {_action.email or await get_user_name(_api, _action.member_id)}"  # type: ignore[arg-type]
+        assert _action.member_id is not None
+        return f"Выгнан {_action.email or await get_user_name(_api, _action.member_id)}"
 
     async def chat_pin_message(_action: MessageAction, _api: VkApiMethod):
         return f"Закрепил/а сообщение {_action.message}"
@@ -217,7 +223,9 @@ async def action_to_string(action: MessageAction, api: VkApiMethod) -> str:
     async def chat_unpin_message(_action: MessageAction, _api: VkApiMethod):
         return "Открепил сообщение"
 
-    async def chat_invite_user_by_link(_action: MessageAction, _api: VkApiMethod):
+    async def chat_invite_user_by_link(
+        _action: MessageAction, _api: VkApiMethod
+    ):
         return "Зашёл в беседу по ссылку"
 
     async def default(_action: MessageAction, _api: VkApiMethod):
@@ -236,7 +244,8 @@ async def action_to_string(action: MessageAction, api: VkApiMethod) -> str:
     # )
 
     translate_dict: dict[
-        MessageActionType, Callable[[MessageAction, VkApiMethod], Awaitable[str]]
+        MessageActionType,
+        Callable[[MessageAction, VkApiMethod], Awaitable[str]],
     ] = {
         MessageActionType.CHAT_PHOTO_UPDATE: chat_photo_update,
         MessageActionType.CHAT_PHOTO_REMOVE: chat_photo_remove,
@@ -258,12 +267,36 @@ async def action_to_string(action: MessageAction, api: VkApiMethod) -> str:
 def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
     """Return media's url and this type"""
 
+    def clean_url(url: str) -> str:
+        before, raw_chunks = url.split("?")
+        chunks = raw_chunks.split("&")
+        conditions = {
+            lambda chunk: chunk.startswith("dl="),
+            lambda chunk: chunk.startswith("no_preview="),
+        }
+        for chunk in chunks.copy():
+            for condition in conditions:
+                if not condition(chunk):
+                    continue
+                chunks.remove(chunk)
+        url = before + "&".join(chunks)
+        return url
+
     def russify_attachment(attachment_info: tuple[str, str]) -> tuple[str, str]:
+        """Translate media type to Russian
+
+        Args:
+            attachment_info (tuple[str, str]): attachment's url and type
+
+        Returns:
+            tuple[str,str]: attachment with _maybe_ translated media type
+        """
         # logger.info(f"{attachment_info = }")
         attachment_url, attachment_type = attachment_info
         converting: dict[str, dict[str, str] | str] = dict(
             photo="фото",
             video="видео",
+            graffiti="граффити",
             audio="аудио",
             audio_message="голосовое сообщение",
             doc="документ",
@@ -282,130 +315,111 @@ def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
                 reached="состоялся и завершён любой стороной",
             ),
         )
-        type_rus = converting.get(
-            attachment_type.split(" ")[0], attachment_type.split(" ")[0]
-        )
+        item_name = attachment_type.split(" ")[0]
+        russified_type = converting.get(item_name, item_name)
 
-        # logger.info(f"{type_rus = }")
-        if isinstance(type_rus, str):
-            convert_dict = dict(attachment_type=type_rus)
+        if isinstance(russified_type, str):
+            convert_dict = dict(attachment_type=russified_type)
         else:
-            convert_dict = type_rus
+            convert_dict = russified_type
 
-        type_rus = " ".join(
-            x for i in attachment_type.split(" ") if (x := convert_dict.get(i, i))
+        russified_type = " ".join(
+            x
+            for i in attachment_type.split(" ")
+            if (x := convert_dict.get(i, i))
         )
 
-        # logger.info(f"after invoking{type_rus = }")
-        return attachment_url, type_rus
-
-        # attachment_url, attachment_type = attachment_info
-        # converting: dict[str, Callable[[], str] | str] = dict(
-        #     photo="фото",
-        #     video="видео",
-        #     audio="аудио",
-        #     audio_message="голосовое сообщение",
-        #     doc="документ",
-        #     link="ссылка",
-        #     market="товар",
-        #     market_album="подборка товаров",
-        #     wall="запись на стене",
-        #     wall_reply="комментарий на стене",
-        #     sticker="стикер",
-        #     gift="подарок",
-        #     call=lambda: " ".join(
-        #         x
-        #         for i in attachment_type.split(" ")
-        #         if (
-        #             x := dict(
-        #                 video="видео-звонок",
-        #                 audio="звонок",
-        #                 canceled_by_initiator="завершён инициатором на этапе дозвона",
-        #                 canceled_by_receiver="завершён получателем на этапе дозвона",
-        #                 reached="состоялся и завершён любой стороной",
-        #             ).get(i, "")
-        #         )
-        #     ),
-        # )
-        # type_rus = converting[attachment_type.split(" ")[0]]
-        # if not isinstance(type_rus, str):
-        #     type_rus = type_rus()
-        # return attachment_url, type_rus
+        return attachment_url, russified_type
 
     attachment_type: str = attachment.type
-    media: dict = attachment.raw[attachment_type]
+    media: dict[str, Any] = attachment.raw[attachment_type]
+    """shorthand for attachment.type[IDX].ATTACHMENT_TYPE"""
 
-    translate_dict: dict[str, Callable[[], str | tuple[str, str]]] = dict(
-        photo=lambda: (
-            ((x := media.get("orig_photo", {}).get("url")) and [x])
-            or [
-                photo_["url"]
-                for photo_ in sorted(
-                    media.get("sizes", []), key=lambda x: x["height"], reverse=True
-                )
-                if photo_["type"] in ["w", "z", "x"]
-            ]
-            or [
-                f"https://vk.com/photo{media.get('owner_id', '???')}_{media.get('id', '???')}"
-            ]
-        )[0],
-        video=lambda: media.get("url", (media["player"], media["title"])),
-        audio=lambda: media["url"],
-        doc=lambda: (media["url"], f"{media['title']} (document)"),
-        market=lambda: f"Артикул: {media['sku']}",
-        market_album=lambda: f"Название: {media['title']}, id владельца: {media['owner_id']}",
-        wall_reply=lambda: f"№{media['id']} от пользователя №{media['owner_id']}",
-        # sticker=lambda: media.get("animation_url", media["images"][-1]["url"]),
-        sticker=lambda: media["images"][-1]["url"],
-        gift=lambda: media["thumb_256"],
-        audio_message=lambda: media["link_mp3"],
-        wall=lambda: f"https://vk.com/wall{media['from_id']}_{media['id']}",
-        link=lambda: media["url"],
-        call=lambda: (
-            "",
-            " ".join(
-                (
-                    i
-                    for i in [
-                        "call",
-                        media["video"] and "video" or "audio",
-                        media["state"],
-                    ]
-                    if i
-                )
+    def default():
+        return ("", f"""•Неизвестное вложение {attachment_type!r}•""")
+
+    translate_dict: dict[str, Callable[[], str | tuple[str, str]]] = dict()
+    """Значение словаря (ссылка-на-медиа, тип-медиа) | ссылка-на-медиа"""
+    translate_dict.update(
+        dict(
+            photo=lambda: (
+                ((x := media.get("orig_photo", {}).get("url")) and [x])
+                or [
+                    photo_["url"]
+                    for photo_ in sorted(
+                        media.get("sizes", []),
+                        key=lambda x: x["height"],
+                        reverse=True,
+                    )
+                    if photo_["type"] in ["w", "z", "x"]
+                ]
+                or [
+                    f"https://vk.com/photo{media.get('owner_id', '???')}_{media.get('id', '???')}"
+                ]
+            )[0],
+            video=lambda: media.get("url", (media["player"], media["title"])),
+            audio=lambda: media["url"],
+            doc=lambda: (media["url"], f"{media['title']} (document)"),
+            market=lambda: f"Артикул: {media['sku']}",
+            market_album=lambda: (
+                f"Название: {media['title']}, id владельца: {media['owner_id']}"
             ),
+            wall_reply=lambda: (
+                f"№{media['id']} от пользователя №{media['owner_id']}"
+            ),
+            sticker=lambda: media["images"][-1]["url"],
+            gift=lambda: media["thumb_256"],
+            audio_message=lambda: media["link_mp3"],
+            wall=lambda: f"https://vk.com/wall{media['from_id']}_{media['id']}",
+            graffiti=lambda: media["url"],
+            link=lambda: media["url"],
+            call=lambda: (
+                "",
+                " ".join(
+                    (
+                        i
+                        for i in [
+                            "call",
+                            media["video"] and "video" or "audio",
+                            media["state"],
+                        ]
+                        if i
+                    )
+                ),
+            ),
+        )
+    )
+    aliases = {
+        "audio-message": lambda: (
+            (
+                r[0]
+                if isinstance(r := translate_dict["audio_message"](), tuple)
+                else r
+            ),
+            "audio_message",
         ),
-    )
-    translate_dict["audio-message"] = lambda: (
-        (r[0] if isinstance(r := translate_dict["audio_message"](), tuple) else r),
-        "audio_message",
-    )
-    translate_dict["gift-item"] = lambda: (
-        (r[0] if isinstance(r := translate_dict["gift"](), tuple) else r),
-        "gift",
-    )
-    # .update(
-    #     {
-    #         "gift-item": lambda: (translate_dict["gift"](), "gift"),
-    #         "audio-message": translate_dict["audio_message"]
-    #     }
-    # )
-
-    default = lambda: ("", f"""•Неизвестное вложение {attachment_type!r}•""")
+        "gift-item": lambda: (
+            (r[0] if isinstance(r := translate_dict["gift"](), tuple) else r),
+            "gift",
+        ),
+    }
+    translate_dict.update(aliases)
 
     try:
-        result_str: str | tuple[str, str] = translate_dict.get(
-            attachment_type, default
-        )()
+        callback = translate_dict.get(attachment_type, default)
+        result: str | tuple[str, str] = callback()
     except KeyError as ex:
-        result_str = ("", f"""•Неизвестное вложение {attachment_type!r}•""")
+        result = ("", f"""•Неизвестное вложение {attachment_type!r}•""")
         logger.error(f"Didn't get {ex.args[0]}. {attachment=}, {media=}")
 
-    if isinstance(result_str, str):
-        result = (result_str, attachment_type)
+    if isinstance(result, str):
+        url = clean_url(result)
+        result = (url, attachment_type)
 
-    elif isinstance(result_str, tuple):
-        result = result_str
+    elif isinstance(result, tuple):
+        url, attachment_type = result
+        url = clean_url(url)
+        result = (url, attachment_type)
 
     result = russify_attachment(result)
     return result
@@ -455,7 +469,9 @@ async def get_chat_name(api: VkApiMethod, chat_id: int) -> str:
 
 
 @overload
-async def get_dialog_name(api: VkApiMethod, dialog_id: Message | int) -> str: ...
+async def get_dialog_name(
+    api: VkApiMethod, dialog_id: Message | int
+) -> str: ...
 @overload
 async def get_dialog_name(
     api: VkApiMethod, dialog_id: Message | int, dialog_type: None
@@ -536,7 +552,8 @@ async def get_text_message(
 
 
 def check_attachments(
-    message: Message | ForwardMessage | ReplyMessage, to_add: list[str] | None = None
+    message: Message | ForwardMessage | ReplyMessage,
+    to_add: list[str] | None = None,
 ):
     """return something like ["&lt;a href="url">something&lt;/a>", "&lt;a href="url">something2&lt;/a>"]"""
     attachments = message.attachments
@@ -564,9 +581,11 @@ async def parse_forwarded_messages(
         tmp_list_: list[str] = list()
         attachments = check_attachments(fwd, tmp_list_)
         if (rtm := fwd.reply_message) and text_depth:
-            rtm_str = await parse_replied_message(api, rtm, text_depth=text_depth)
+            rtm_str = await parse_replied_message(
+                api, rtm, text_depth=text_depth
+            )
             attachments.append(
-                f"С ответом на сообщение:<blockquote expandable>{rtm_str.replace(SEP, "\n | ")}</blockquote>"
+                f"С ответом на сообщение:<blockquote expandable>{rtm_str.replace(SEP, '\n | ')}</blockquote>"
             )
         elif rtm:
             attachments.append([f'<a href="{rtm.link}">Сообщение</a>'])
@@ -576,7 +595,7 @@ async def parse_forwarded_messages(
                 api, fwd_msgs, text_depth=text_depth - 1
             )
             attachments.append(
-                f"С пересланными сообщениями:<blockquote expandable>{fwd_str.replace(SEP, "\n | ")}</blockquote>"
+                f"С пересланными сообщениями:<blockquote expandable>{fwd_str.replace(SEP, '\n | ')}</blockquote>"
             )
             # attachments.extend(["С пересланными сообщениями:"] + fwd_str.split(SEP))
 
@@ -588,15 +607,21 @@ async def parse_forwarded_messages(
 
         fwd_list.append(f"{user}: {fwd.text}\n{attachments_str}")
 
-    fwd_string = SEP.join([("\n" + fwd_).replace("\n", SEP) for fwd_ in fwd_list])
+    fwd_string = SEP.join(
+        [("\n" + fwd_).replace("\n", SEP) for fwd_ in fwd_list]
+    )
     return fwd_string
 
 
 async def parse_replied_message(
-    api: VkApiMethod, reply_to_message: ReplyMessage, text_depth: bool | int = False
+    api: VkApiMethod,
+    reply_to_message: ReplyMessage,
+    text_depth: bool | int = False,
 ) -> str:
     reply_message_normal = Message(
-        **(await api.messages.getById(message_ids=reply_to_message.id))["items"][0]
+        **(await api.messages.getById(message_ids=reply_to_message.id))[
+            "items"
+        ][0]
     )
     rtm = (
         await parse_message(
@@ -621,9 +646,7 @@ async def check_attached_messages(
             reply_to_message,
             text_depth=(1 if text_depth >= 0 else text_depth - 1),
         )
-        rtm_string = (
-            f"С ответом на сообщение:<blockquote expandable>{rtm_str}</blockquote>"
-        )
+        rtm_string = f"С ответом на сообщение:<blockquote expandable>{rtm_str}</blockquote>"
         to_add.append(rtm_string)
 
     if forwarded_messages := message.forwarded_messages:
@@ -655,8 +678,11 @@ async def parse_event(
     text_depth=-1,
 ) -> tuple[str, bool]:
     """Return output and chat_is_in_blocklist"""
-    msg = (await api.messages.getById(message_ids=event.message_id))["items"][0]
-    message = Message(**msg)
+    msgs = (await api.messages.getById(message_ids=event.message_id))["items"]
+    if not msgs:
+        raise RuntimeError("Didn't found message for event", event)
+    msg = msgs[0]
+    message = Message.model_validate(msg)
     text, conversation = await get_text_message(message, api, text_depth)
     is_in_blocklist = conversation in CHATS_BLACKLIST
     return text, is_in_blocklist

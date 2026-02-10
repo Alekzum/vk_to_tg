@@ -1,8 +1,12 @@
-from .main import on_message_new, handle
-from . import my_async_functions
 from . import classes
 from . import main
 from . import utils
 from . import handlers
 
-handlers.load_caches()
+
+__all__ = [
+    "classes",
+    "main",
+    "utils",
+    "handlers",
+]

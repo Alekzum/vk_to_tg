@@ -1,4 +1,4 @@
-from aiogram import Bot, F, Router
+from aiogram import Router
 
 # from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, Window, DialogManager
@@ -8,25 +8,20 @@ from aiogram_dialog.widgets.kbd import (
     Cancel,
     Next,
     Back,
-    SwitchTo,
     Start,
     Multiselect,
     ScrollingGroup,
     ManagedMultiselect,
 )
 
-# from aiogram_dialog.widgets.common import ManagedScroll
 from aiogram_dialog.api.entities import ChatEvent
 from utils.config import Config
-from utils.interface.user_settings import get_blacklist, set_blacklist
+from utils.interface.user_settings import set_blacklist
 from ..utils.fsm_states import SettingStates
 from .handler_vk_send import on_choose_chat, CHATS_PAGE_LEN, on_page_changed
 
 import operator
-import structlog
 from utils.my_logging import getLogger
-import logging
-import asyncio
 
 
 async def get_chats_blacklist(dialog_manager: DialogManager, **data):
@@ -34,7 +29,7 @@ async def get_chats_blacklist(dialog_manager: DialogManager, **data):
         logger.warning("Didn't found user_id!")
         return dict(chats_blacklist="*НЕИЗВЕСТНО*")
 
-    logger.debug(f"get {user.id=}'s blacklist")
+    logger.debug("get user's blacklist", user_id=user.id)
     cfg = await Config(user.id).load_values()
     blacklist = ", ".join([str(i) for i in cfg._blacklist])
 
@@ -46,7 +41,7 @@ async def get_selected_blacklist(dialog_manager: DialogManager, **data):
         logger.warning("Didn't found user_id!")
         return dict(chats_blacklist="*НЕИЗВЕСТНО*")
 
-    logger.debug(f"get {user.id=}'s selected blacklist")
+    logger.debug("get user's selected blacklist", user_id=user.id)
     # cfg = await Config(user.id).load_values()
     peer_ids = dialog_manager.dialog_data.get("vk_blacklist_peer_ids", [])
     blacklist = ", ".join([str(i) for i in peer_ids]) or "*Чёрный список пуст*"
@@ -64,7 +59,7 @@ async def save_blacklist(
         return logger.warning("Didn't found user_id!")
 
     user_id = user.id
-    logger.debug(f"saving blacklist for user {user_id}")
+    logger.debug("saving blacklist for user", user_id=user_id)
 
     peer_ids = dialog_manager.dialog_data.get("vk_blacklist_peer_ids", [])
 
@@ -80,7 +75,7 @@ async def check_blacklist(
     if not (user := event.from_user):
         return logger.warning("Didn't found user_id!")
     user_id = user.id
-    # logger.debug(f"{user_id=}, {selected_id=}")
+    logger.debug("selected ids for user", user_id=user_id)
 
     chats_data: list[tuple[int, str, int]] = dialog_manager.dialog_data[
         "vk_chat_list_data"
@@ -93,7 +88,12 @@ async def check_blacklist(
         if item[0] in item_ids:
             peer_ids.extend([item[1], item[2]])
 
-    logger.debug(f"{item_ids=}, {peer_ids=}")
+    logger.debug(
+        "new blacklist for user",
+        selected_item_ids=item_ids,
+        peer_ids=peer_ids,
+        user_id=user_id,
+    )
     dialog_manager.dialog_data["vk_blacklist_peer_ids"] = peer_ids
 
 
@@ -140,7 +140,9 @@ blacklist_dialog = Dialog(
         state=SettingStates.Blacklist.SELECT,
     ),
     Window(
-        Format("Ваш выбор чатов: {chats_blacklist}. Хотите сохранить чёрный список?"),
+        Format(
+            "Ваш выбор чатов: {chats_blacklist}. Хотите сохранить чёрный список?"
+        ),
         Cancel(Const("Да"), on_click=save_blacklist),
         Back(Const("Нет")),
         state=SettingStates.Blacklist.CONFIRM,

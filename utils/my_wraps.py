@@ -15,6 +15,7 @@ def try_import(module):
 def wrap_loggers():
     wrap_loggers_module("aiogram")
     wrap_loggers_module("pyrogram")
+    wrap_loggers_module("vkbottle.modules")
     wrap_loggers_module("utils", relative_to=Path())
 
 
@@ -24,7 +25,7 @@ def wrap_loggers_module(
     module = try_import(module_name)
     if module is None:
         logger.error(
-            f"Didn't found module pyrogram! Use `pip install {module_name}`",
+            f"Didn't found module {module_name}",
             exc_info=True,
         )
         return

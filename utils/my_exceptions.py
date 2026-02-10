@@ -60,7 +60,7 @@ def handle_exception(ex: Exception):
                 format_key(k): format_dict(v)
                 for (k, v) in d.items()
                 if str(k)[0] != "_"
-            }  # type: ignore
+            }
             if isinstance(d, dict)
             else limit_string(d)
         )

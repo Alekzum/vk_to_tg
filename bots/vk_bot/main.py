@@ -6,10 +6,10 @@ from utils.my_longpoll import (
     save_longpoll_info,
     get_last_vk_id,
 )
-from vk_api.longpoll import VkEventType, Event  # type: ignore
+from vk_api.longpoll import VkEventType, Event
 
 from requests.exceptions import ConnectionError, Timeout
-from httpx import NetworkError, TimeoutException
+from httpx import NetworkError, TimeoutException, RemoteProtocolError
 
 from .. import telegram_bot
 from .my_async_functions import get_dialog_name
@@ -22,12 +22,20 @@ from utils.interface.user_settings import get_polling_state, set_polling_state
 from utils.my_logging import getLogger
 import asyncio
 import traceback
-import vk_api  # type: ignore
+import vk_api
 from html import escape
+
+from io import BytesIO
 
 
 logger = getLogger(__name__)
-TIMEOUT_EXCEPTIONS = (Timeout, ConnectionError, NetworkError, TimeoutException)
+TIMEOUT_EXCEPTIONS = (
+    Timeout,
+    ConnectionError,
+    NetworkError,
+    TimeoutException,
+    RemoteProtocolError,
+)
 
 
 cache: dict[str, dict[tuple, dict]] = {
@@ -43,16 +51,25 @@ def log(text: str) -> None:
 
 
 async def send_to_tg(
-    tgClient: MyTelegram, text: str, chat_id: int | None = None
+    tgClient: MyTelegram, text: str, chat_id: int | None = None, block_size=4000
 ):
-    BLOCK_SIZE = 4000
+    logger.debug(f"{text}")
+    chat_id = chat_id or tgClient.CHAT_ID
+
+    if len(text) > block_size:
+        current_file = BytesIO(text.encode("utf-8"))
+        current_file.name = "big_message.txt"
+
+        await tgClient.tg.send_document(
+            chat_id=chat_id,
+            document=current_file,
+            caption=f"Часть содержимого файла: <blockquote expandable><code>{text[:256]}</code>...</blockquote>",
+        )
     blocks = [
-        text[BLOCK_SIZE * i : BLOCK_SIZE * (i + 1)]
-        for i in range(0, (len(text) // BLOCK_SIZE) + 1)
+        text[block_size * i : block_size * (i + 1)]
+        for i in range(0, (len(text) // block_size) + 1)
     ]
 
-    logger.debug(f"{text=}, {blocks=}")
-    chat_id = chat_id or tgClient.CHAT_ID
     for block in blocks:
         await tgClient.tg.send_message(
             chat_id=chat_id,
@@ -110,7 +127,7 @@ async def handle_(
     if peer_id:
         if peer_id in tg_client.config._blacklist:
             return False
-        logger.debug(f"{peer_id=}")
+        logger.debug("peed id is not in blacklist", peer_id=peer_id)
         peer_name = handlers.chats_cache.get(
             peer_id, await get_dialog_name(api, peer_id)
         )
@@ -118,7 +135,7 @@ async def handle_(
             handlers.chats_cache[peer_id] = peer_name
             if peer_name in tg_client.config._blacklist:
                 return False
-            logger.debug(f"{peer_name=}")
+            logger.debug("peer name is not in blacklist", peer_name=peer_name)
 
     # peer_id = getattr(event, "chat_id", None)
     # chat_id: int
@@ -130,6 +147,7 @@ async def handle_(
         if chat in tg_client.config._blacklist:
             return False
 
+    logger.debug("Handling new event", event_object=event)
     if event.type == VkEventType.MESSAGE_NEW:
         print_if_its_me(event)
         await handlers.on_message_new(event, api, tg_client)
@@ -268,19 +286,20 @@ async def main(user_id: int):
     vk_client, vk_longpoll = await get_client_and_longpoll(user_id)
     api = vk_client.get_api()
 
-    tg_client = MyTelegram(user_id)
+    tg_client = MyTelegram(user_id, "VkAPI2TgBot")
     logger.debug("Бот стартует...", user_id=user_id)
     await tg_client.init()
 
+    await vk_longpoll.update_longpoll_server(update_ts=True)
     server_ts, server_pts = vk_longpoll.ts, vk_longpoll.pts
     logger.info("On server", ts=server_ts, pts=server_pts, user_id=user_id)
     server_ts = server_ts if isinstance(server_ts, int) else 32
 
     await load_longpoll_info(user_id, vk_longpoll)
-    await vk_longpoll.update_longpoll_server(update_ts=False)
     logger.info(
         "Saved", ts=vk_longpoll.ts, pts=vk_longpoll.pts, user_id=user_id
     )
+    # if server_ts <
     logger.info(
         f"Bot is getting last {server_ts - (vk_longpoll.ts if isinstance(vk_longpoll.ts, int) else 32)} events",
         user_id=user_id,

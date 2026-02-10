@@ -18,8 +18,8 @@ LEVEL_INFO = logging.DEBUG if IS_DEBUG else logging.INFO
 LEVEL_WARNING = logging.DEBUG if IS_DEBUG else logging.WARNING
 
 STREAM_LEVEL = LEVEL_INFO
-FILE_LEVEL = LEVEL_WARNING
-TEMPFILE_LEVEL = LEVEL_INFO
+FILE_LEVEL = LEVEL_INFO
+TEMPFILE_LEVEL = logging.DEBUG
 
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
@@ -59,8 +59,7 @@ def filter_my_callsite_processor(blacklist: typing.Iterable = ()):
     return inner
 
 
-getLogger = structlog.stdlib.get_logger
-get_logger = getLogger
+getLogger = get_logger = structlog.stdlib.get_logger
 
 
 structlog.configure(
@@ -140,8 +139,8 @@ MUTE_DICT: dict[str, int | str] = {
     "aiogram_dialog": LEVEL_INFO,
     "httpcore": LEVEL_WARNING,
     "httpx": LEVEL_WARNING,
-    "utils": LEVEL_INFO,
-    "bots": LEVEL_INFO,
+    "utils": logging.DEBUG,
+    "bots": logging.DEBUG,
 }
 
 for name, level in MUTE_DICT.items():

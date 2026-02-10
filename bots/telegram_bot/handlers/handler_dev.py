@@ -1,14 +1,12 @@
 from utils.config import OWNER_ID
 from aiogram import Router, F
-from aiogram.types import Message, BufferedInputFile
+from aiogram.types import Message
 from aiogram.filters import Command, CommandObject
 from aiogram.utils import formatting
 from aiogram_dialog import DialogManager
 from aiogram_dialog.api.exceptions import NoContextError
-from typing import Any, Callable
-import structlog
+from typing import Any
 from utils.my_logging import getLogger
-import logging
 
 # from utils.text2image import text_to_image
 import json
@@ -35,13 +33,20 @@ COMMANDS_DESCRIPTION: dict[str, str] = dict(
 
 HELP_TEXT = formatting.as_marked_section(
     'Доступные команды "разработчика"',
-    *[formatting.as_key_value(f"/{k}", v) for (k, v) in COMMANDS_DESCRIPTION.items()],
+    *[
+        formatting.as_key_value(f"/{k}", v)
+        for (k, v) in COMMANDS_DESCRIPTION.items()
+    ],
 ).as_html()
 
 
 def clear_dict(d: dict | Any, _depth=3) -> dict:
     return (
-        {k: clear_dict(v, _depth - 1) for (k, v) in d.copy().items() if k[0] != "_"}
+        {
+            k: clear_dict(v, _depth - 1)
+            for (k, v) in d.copy().items()
+            if k[0] != "_"
+        }
         if isinstance(d, dict) and _depth >= 1
         else d
     )
@@ -81,7 +86,10 @@ async def cmd_delete_data(
         case "del_key":
             deleted_object = obj.pop(last_object)
             await message.answer(html.escape(f"{deleted_object=}"))
-            logger.debug(f"{deleted_object!r}, {deleted_object!s}")
+            logger.debug(
+                "deleted objects",
+                deleted_object=deleted_object
+            )
         case "get_key":
             required_object = obj[last_object]
             await message.answer(
@@ -97,9 +105,13 @@ async def cmd_delete_data(
 async def cmd_data(
     message: Message, dialog_manager: DialogManager, command: CommandObject
 ):
-    make_dict: Callable[[dict[Any, Any]], dict[Any, type]] = lambda d: {k: type(v) for (k, v) in d.copy().items()}
+    def make_dict(d: dict[Any, Any]) -> dict[Any, type]:
+        return {k: type(v) for (k, v) in d.copy().items()}
+
     required_data: dict[str, dict[Any, Any]] = dict(
-        middleware_data=dict(middleware_data=make_dict(dialog_manager.middleware_data)),
+        middleware_data=dict(
+            middleware_data=make_dict(dialog_manager.middleware_data)
+        ),
         dialog_data=dict(dialog_data=make_dict(dialog_manager.dialog_data)),
         global_data=dict(global_data=make_dict(globals().copy())),
         local_data=dict(local_data=make_dict(locals().copy())),
@@ -110,9 +122,13 @@ async def cmd_data(
     data = required_data[command.command]
     try:
         raw = html.escape(
-            json.dumps(data, indent=4, ensure_ascii=False, sort_keys=True, default=str)
+            json.dumps(
+                data, indent=4, ensure_ascii=False, sort_keys=True, default=str
+            )
         )
-        msgs = [raw[4000 * i : 4000 * (i + 1)] for i in range(0, len(raw) // 2000)]
+        msgs = [
+            raw[4000 * i : 4000 * (i + 1)] for i in range(0, len(raw) // 2000)
+        ]
         [await message.answer(msg) for msg in msgs if msg.strip()]
         # path = await text_to_image(
         #     json.dumps(data, indent=4, ensure_ascii=False, sort_keys=True, default=str)
@@ -122,7 +138,7 @@ async def cmd_data(
         #     BufferedInputFile(path.read_bytes(), "result.png"), caption="Current data"
         # )
     except NoContextError:
-        await message.answer(f"You are not in dialog now")
+        await message.answer("You are not in dialog now")
     # except Exception as ex:
     #     await message.answer(f"Didn't fetch data because {ex=}")
 
@@ -147,6 +163,6 @@ async def cmd_start(message: Message, dialog_manager: DialogManager):
         string = current_state.state
         await message.answer(f"Current state: {string}")
     except NoContextError:
-        await message.answer(f"You are not in dialog now")
+        await message.answer("You are not in dialog now")
     except Exception as ex:
         await message.answer(f"Didn't fetch current window because {ex=}")
