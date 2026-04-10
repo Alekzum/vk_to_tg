@@ -14,9 +14,7 @@ from ..utils.fsm_states import (
     BotStates,
     SettingStates,
 )
-import structlog
 from utils.my_logging import getLogger
-import logging
 import traceback
 from html import escape
 
@@ -46,9 +44,17 @@ common_dialog = Dialog(
     ),
     Window(
         Const(HELP_MENU),
-        Start(text=Const("Start getting messages"), id="bot_menu", state=BotStates.MENU),
-        Start(text=Const("Settings"), id="settings_menu", state=SettingStates.MENU),
-        Start(text=Const("Repeat messages"), id="echo_menu", state=EchoStates.MENU),
+        Start(
+            text=Const("Start getting messages"),
+            id="bot_menu",
+            state=BotStates.MENU,
+        ),
+        Start(
+            text=Const("Settings"), id="settings_menu", state=SettingStates.MENU
+        ),
+        Start(
+            text=Const("Repeat messages"), id="echo_menu", state=EchoStates.MENU
+        ),
         state=CommonStates.MENU,
     ),
 )
@@ -73,12 +79,17 @@ common_dialog = Dialog(
 
 @rt.error()
 async def error_handler(error: ErrorEvent, bot: Bot):
-    logger.critical(f"Critical error caused by %s", error.exception, exc_info=True)
+    logger.critical(
+        "Critical error caused by %s", error.exception, exc_info=True
+    )
     # error_message = f"Critical error caused by %s" % error.exception
     # await bot.send_message(OWNER_ID, )
 
     error_str = "".join(traceback.format_exception(error.exception, limit=3))
-    for chunk in [error_str[i*4096:(i+1)*4096] for i in range(len(error_str)//4096)]:
+    for chunk in [
+        error_str[i * 4096 : (i + 1) * 4096]
+        for i in range(len(error_str) // 4096)
+    ]:
         await bot.send_message(OWNER_ID, escape(chunk))
     # logger.error("exception", error_exception=error.exception)
 

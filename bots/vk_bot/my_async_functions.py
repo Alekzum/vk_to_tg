@@ -45,7 +45,12 @@ class CacheLambda(MemoryCache):
         kwargs = self.api_args(id)
         try:
             raw_info = await api._vk.method(self.api_method, values=kwargs)
-            logger.debug(f"{self.api_method=}, {id=}, {raw_info=}")
+            logger.debug(
+                "update info",
+                api_method=self.api_method,
+                id=id,
+                raw_info=raw_info,
+            )
             checked_info = (
                 raw_info[0] if isinstance(raw_info, list) else raw_info
             )
@@ -268,19 +273,20 @@ def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
     """Return media's url and this type"""
 
     def clean_url(url: str) -> str:
-        before, raw_chunks = url.split("?")
-        chunks = raw_chunks.split("&")
-        conditions = {
-            lambda chunk: chunk.startswith("dl="),
-            lambda chunk: chunk.startswith("no_preview="),
+        if url.count("?") != 1:
+            return url
+        url_result, raw_chunks = url.split("?")
+        url_result += "?"
+        arguments_to_replace = {
+            "no_preview": "0",
         }
-        for chunk in chunks.copy():
-            for condition in conditions:
-                if not condition(chunk):
-                    continue
-                chunks.remove(chunk)
-        url = before + "&".join(chunks)
-        return url
+        for chunk in iter(raw_chunks.split("&")):
+            argument = chunk.split("=")[0]
+            if argument in arguments_to_replace:
+                url_result += argument + "=" + arguments_to_replace[argument] + "&"
+                continue
+            url_result += chunk + "&"
+        return url_result
 
     def russify_attachment(attachment_info: tuple[str, str]) -> tuple[str, str]:
         """Translate media type to Russian

@@ -763,7 +763,7 @@ class VkApiMethod(object):
             if isinstance(v, (list, tuple)):
                 kwargs[k] = ",".join(str(x) for x in v)
 
-        return await self._vk.method(self._method, kwargs)
+        return await self._vk.method(self._method or "", kwargs)
 
 
 class AsyncVkLongPoll(object):
@@ -838,7 +838,7 @@ class AsyncVkLongPoll(object):
         self.key = response["key"]
         self.server = response["server"]
 
-        self.url = "https://" + self.server
+        self.url = "https://" + (self.server or "")
 
         if update_ts:
             self.ts = response["ts"]
@@ -910,8 +910,8 @@ class AsyncVkLongPoll(object):
 
         for event in events:
             if event.type in self.PRELOAD_MESSAGE_EVENTS:
-                message_ids.add(event.message_id)
-                event_by_message_id[event.message_id].append(event)
+                message_ids.add(getattr(event, "message_id"))
+                event_by_message_id[getattr(event, "message_id")].append(event)
 
         if not message_ids:
             return

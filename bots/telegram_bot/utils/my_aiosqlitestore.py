@@ -43,7 +43,8 @@ class AioSQLStorage(BaseStorage):
 
         if self._ser_m != "pickle" and self._ser_m != "json":
             logger.warning(
-                f"'{self._ser_m}' is unknown serializing method! A 'pickle' will be used."
+                "Unknown serializing method! A 'pickle' will be used.",
+                serializing_method=serializing_method
             )
             self._ser_m = "pickle"
 

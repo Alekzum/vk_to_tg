@@ -1,65 +1,84 @@
-import logging
-import logging.handlers
-import os
-import sys
-import typing
-
+from typing import Iterable, MutableMapping
 import structlog
+import logging.handlers
+import logging
+import sys
+import os
+
+import dotenv
+
+
+getLogger = get_logger = structlog.stdlib.get_logger
 
 LOG_DIR = "logs"
 LOG_FILE = "log.log"
 
-IS_DEBUG = bool(sys.argv[1:] and "--debug" in sys.argv[1:])
-IS_LOUD = bool(sys.argv[1:] and "--loud" in sys.argv[1:])
 
-LEVEL = logging.INFO
+IS_DEBUG = bool(
+    sys.argv[1:]
+    and "--debug" in sys.argv[1:]
+    or dotenv.get_key(".env", "IS_DEBUG")
+)
+IS_LOUD = bool(
+    sys.argv[1:]
+    and "--loud" in sys.argv[1:]
+    or dotenv.get_key(".env", "IS_LOUD")
+)
 
 LEVEL_INFO = logging.DEBUG if IS_DEBUG else logging.INFO
 LEVEL_WARNING = logging.DEBUG if IS_DEBUG else logging.WARNING
 
-STREAM_LEVEL = LEVEL_INFO
-FILE_LEVEL = LEVEL_INFO
+LEVEL = LEVEL_INFO
+
+LOUD_INFO = logging.DEBUG if IS_LOUD else logging.INFO
+LOUD_WARNING = logging.DEBUG if IS_LOUD else logging.WARNING
+
+STREAM_LEVEL = LEVEL
+FILE_LEVEL = logging.WARNING
 TEMPFILE_LEVEL = logging.DEBUG
 
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
 
 
-# TODO: show caller's caller modline instead caller's modline
-# (add param depth?)
+BASE_PATH = os.path.abspath(".")
+
+
 def my_callsite_processor(
-    inclide_filename=True, include_funcname=True, inclide_lineno=True
+    include_filename=True,
+    include_funcname=True,
+    inclide_lineno=True,
+    use_path_not_filename=True,
 ):
-    def inner(logger, method_name, event_dict):
-        file_n, func_n, line_n = (
-            event_dict.pop("filename", ""),
-            event_dict.pop("func_name", ""),
-            event_dict.pop("lineno", ""),
-        )
+    def inner(logger, method_name: str, event_dict: MutableMapping):
+        file_p: str = event_dict.pop("pathname", "")
+        file_n: str = event_dict.pop("filename", "")
+        func_n: str = event_dict.pop("func_name", "")
+        line_n: int = event_dict.pop("lineno", "")
+
         array = []
-        if inclide_filename:
+        if include_filename and use_path_not_filename:
+            array.append(file_p.removeprefix(BASE_PATH + os.sep))
+        elif include_filename:
             array.append(file_n)
         if include_funcname:
             array.append(func_n)
         if inclide_lineno:
             array.append(line_n)
         args = tuple(array)
-        event_dict["modline"] = ":".join(str(i) for i in args)
+        event_dict["modline"] = "|" + ":".join(str(i) for i in args)
         return event_dict
 
     return inner
 
 
-def filter_my_callsite_processor(blacklist: typing.Iterable = ()):
+def remove_from_callsite_processor(blacklist: Iterable = ()):
     def inner(logger, method_name, event):
         if any(logger.name.startswith(x) for x in blacklist):
             event.pop("modline")
         return event
 
     return inner
-
-
-getLogger = get_logger = structlog.stdlib.get_logger
 
 
 structlog.configure(
@@ -70,13 +89,21 @@ structlog.configure(
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.CallsiteParameterAdder(
             [
+                structlog.processors.CallsiteParameter.PATHNAME,
                 structlog.processors.CallsiteParameter.FILENAME,
                 structlog.processors.CallsiteParameter.FUNC_NAME,
                 structlog.processors.CallsiteParameter.LINENO,
             ],
         ),
         my_callsite_processor(include_funcname=False),
-        filter_my_callsite_processor(["aiogram", "pyrogram", "__main__"]),
+        remove_from_callsite_processor(
+            [
+                "aiogram",
+                "pyrogram",
+                "__main__",
+                "utils.my_patches",
+            ]
+        ),
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -126,22 +153,30 @@ root_logger = structlog.wrap_logger(root_logger)
 
 logger = structlog.get_logger(__name__)
 
-logger.debug("Started", custom_level=LEVEL)
-logger.info("Started", custom_level=LEVEL)
+logger.info("Logging module loaded", custom_level=LEVEL)
 
-
-MUTE_DICT: dict[str, int | str] = {
-    "aiosqlite": logging.INFO,
-    "pyrogram": logging.ERROR,
-    "pyrogram.crypto": logging.WARNING,
-    "urllib3": LEVEL_WARNING,
-    "asyncio": LEVEL_WARNING,
-    "aiogram_dialog": LEVEL_INFO,
-    "httpcore": LEVEL_WARNING,
-    "httpx": LEVEL_WARNING,
+MUTEDICT = {
     "utils": logging.DEBUG,
+    "httpx": LOUD_WARNING,
+    "handlers": LEVEL_WARNING,
+    "asyncio": LOUD_WARNING,
+    "aiosqlite": logging.INFO,
+    "httpcore": LOUD_WARNING,
+    "html": logging.DEBUG,
+    "pyrogram": logging.ERROR,
+    "pyrogram.session": logging.WARNING,
+    "pyrogram.crypto": logging.WARNING,
+    "pyrogram.connection": logging.WARNING,
+    "pyrogram.dispatcher": logging.WARNING,
+    "utils.my_patches": LOUD_INFO,
+    "utils.my_decorators": LOUD_INFO,
+    "utils.config.my_types": LOUD_INFO,
+    "utils.config.my_things": LOUD_INFO,
+    "urllib3": LOUD_WARNING,
     "bots": logging.DEBUG,
+    "bots.vk_bot.my_async_functions": LOUD_INFO,
+    "bots.vk_bot.utils": LOUD_INFO,
 }
 
-for name, level in MUTE_DICT.items():
+for name, level in MUTEDICT.items():
     logging.getLogger(name).setLevel(level)

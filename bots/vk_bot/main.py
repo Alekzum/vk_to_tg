@@ -54,7 +54,7 @@ async def send_to_tg(
     tgClient: MyTelegram, text: str, chat_id: int | None = None, block_size=4000
 ):
     logger.debug(f"{text}")
-    chat_id = chat_id or tgClient.CHAT_ID
+    chat_id = chat_id or tgClient.chat_id
 
     if len(text) > block_size:
         current_file = BytesIO(text.encode("utf-8"))
@@ -116,7 +116,7 @@ async def handle_(
     """
 
     def print_if_its_me(obj):
-        return beautify_print(obj) if tg_client.CHAT_ID == OWNER_ID else None
+        return beautify_print(obj) if tg_client.chat_id == OWNER_ID else None
 
     if event.type in {601, 602}:
         return False
@@ -125,7 +125,7 @@ async def handle_(
 
     peer_id: int | None = getattr(event, "peer_id", None)
     if peer_id:
-        if peer_id in tg_client.config._blacklist:
+        if peer_id in tg_client.config.blacklist:
             return False
         logger.debug("peed id is not in blacklist", peer_id=peer_id)
         peer_name = handlers.chats_cache.get(
@@ -133,21 +133,26 @@ async def handle_(
         )
         if peer_name is not None:
             handlers.chats_cache[peer_id] = peer_name
-            if peer_name in tg_client.config._blacklist:
+            if peer_name in tg_client.config.blacklist:
                 return False
             logger.debug("peer name is not in blacklist", peer_name=peer_name)
 
     # peer_id = getattr(event, "chat_id", None)
     # chat_id: int
     if chat_id := round(getattr(event, "chat_id", 0) + 2e9):
-        if chat_id in tg_client.config._blacklist:
+        if chat_id in tg_client.config.blacklist:
             return False
 
         chat = await get_dialog_name(api, chat_id) if chat_id else None
-        if chat in tg_client.config._blacklist:
+        if chat in tg_client.config.blacklist:
             return False
 
-    logger.debug("Handling new event", event_object=event)
+    logger.debug(
+        "Handling new event",
+        event_object=event,
+        event_type=event.type,
+        raw_event=event.__dict__,
+    )
     if event.type == VkEventType.MESSAGE_NEW:
         print_if_its_me(event)
         await handlers.on_message_new(event, api, tg_client)
@@ -170,7 +175,7 @@ async def handle_(
         await handlers.on_read_all_incoming_messages(event, api, tg_client)
 
     elif event.type == VkEventType.MESSAGES_COUNTER_UPDATE:
-        await handlers.on_message_counter_update(event, api, tg_client)
+        await handlers.on_unread_messages_counter_update(event, api, tg_client)
 
     # elif event.type in {
     #     VkEventType.MESSAGE_FLAGS_RESET,
@@ -191,7 +196,7 @@ async def get_old_messages(
     vk_longpoll: AsyncVkLongPoll,
     tg_client: MyTelegram,
 ) -> None:
-    user_id = tg_client.CHAT_ID
+    user_id = tg_client.chat_id
     max_msg_id = await get_last_vk_id(user_id)
     result: dict = {"more": 1}
     index = 0
@@ -225,7 +230,7 @@ async def get_old_messages(
                 fake_event = Event(event)
 
             await handle(fake_event, api, tg_client)
-            if tg_client.CHAT_ID == OWNER_ID:
+            if tg_client.chat_id == OWNER_ID:
                 logger.debug(f"getLongPollHistory - {event=}, {fake_event=}")
             index += 1
             try:
@@ -237,7 +242,7 @@ async def get_old_messages(
         vk_longpoll.ts = ts
         vk_longpoll.key = key
         vk_longpoll.pts = pts
-        await save_longpoll_info(tg_client.CHAT_ID, vk_longpoll, log=True)
+        await save_longpoll_info(tg_client.chat_id, vk_longpoll, log=True)
 
     if index:
         logger.debug(f"Processed {index} updates", user_id=user_id)
@@ -324,6 +329,7 @@ async def main(user_id: int):
                         ts=vk_longpoll.ts,
                         pts=vk_longpoll.pts,
                         user_id=user_id,
+                        index=index,
                     )
 
                 await asyncio.sleep(0)

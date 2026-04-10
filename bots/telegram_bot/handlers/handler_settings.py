@@ -31,7 +31,7 @@ async def get_chats_blacklist(dialog_manager: DialogManager, **data):
 
     logger.debug("get user's blacklist", user_id=user.id)
     cfg = await Config(user.id).load_values()
-    blacklist = ", ".join([str(i) for i in cfg._blacklist])
+    blacklist = ", ".join([str(i) for i in cfg.blacklist])
 
     return dict(chats_blacklist=blacklist)
 

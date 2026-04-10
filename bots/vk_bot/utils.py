@@ -38,7 +38,7 @@ def beautify_print(
         ),
     )
     if need_to_print:
-        logger.debug(string)
+        logger.debug("printing...", object=obj)
     return string
 
 

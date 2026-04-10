@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+import inspect
 import pathlib
 import sqlite3
 import dotenv
@@ -9,7 +9,7 @@ from functools import wraps
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar, overload
 from utils.my_logging import getLogger
-from .interface.user_settings import DB_PATH, get_user, save_user
+from .interface.user_settings import DB_PATH, get_user, update_user
 
 dotenv.load_dotenv(".env")
 CHATS_BLACKLIST: list[str] = ['🚖🚕Такси "Ладья"🚕🚖']
@@ -41,7 +41,7 @@ ENTIRES4FUNCS = Literal[
 UNSET = object()
 
 
-def setup_thing(self: "Config"):
+def wrap_loaded_checker(self: "Config"):
     def check():
         nonlocal self
         if not self._is_loaded:
@@ -49,20 +49,19 @@ def setup_thing(self: "Config"):
                 f"Need to {type(self).__name__}.load_values() before using this function!"
             )
 
-    def check_for_init(func):
-        @wraps(func)
+    def check_for_loaded(func):
         def inner_sync(*args, **kwargs):
             check()
             return func(*args, **kwargs)
 
-        @wraps(func)
         async def inner_async(*args, **kwargs):
             check()
             return await func(*args, **kwargs)
 
-        return inner_async if asyncio.iscoroutinefunction(func) else inner_sync
+        inner = inner_async if inspect.iscoroutinefunction(func) else inner_sync
+        return wraps(func)(inner)
 
-    return check_for_init
+    return check_for_loaded
 
 
 @dataclass
@@ -72,19 +71,23 @@ class Config:
     _BOT_TOKEN: str
     """For telegram bot"""
 
-    _chat_id: int
+    chat_id: int
     _ADMIN_IDS: list[int]
     """User ids, which can use dev commands"""
 
     _ACCESS_TOKEN: str
     """For vkontakte"""
 
-    _blacklist: set[str | int]
+    blacklist: set[str | int]
     """Which dialogs needs to be ignored"""
 
     _pts: int
     _ts: int
-    POLLING_STATE: bool = False
+
+    pinned_message_id: int = -1
+    """Message's id for "Unread chats count" updates """
+
+    polling_state: bool = False
 
     max_msg_id: int = 0
 
@@ -94,20 +97,20 @@ class Config:
 
         self._BOT_TOKEN = self.get_variable("BOT_TOKEN")
         self._ADMIN_IDS = self.get_variable("ADMIN_IDS")
-        self._chat_id = chat_id
+        self.chat_id = chat_id
         self._connector = sqlite3.connect(DB_PATH)
 
         self._is_loaded = False
         # self.load_values()
 
     def __post_init__(self):
-        thing = setup_thing(self)
-        self.save_values = thing(self.save_values)
+        loaded_wrapping = wrap_loaded_checker(self)
+        self.save_variables = loaded_wrapping(self.save_variables)
 
-    def _set_pts(self, value: int):
+    def set_pts(self, value: int):
         self._pts = value
 
-    def _set_ts(self, value: int):
+    def set_ts(self, value: int):
         self._ts = value
 
     @property
@@ -127,21 +130,23 @@ class Config:
     def __del__(self):
         self._connector.close()
 
-    async def save_values(self):
-        await save_user(
-            tg_id=self._chat_id,
-            items=self._blacklist,
+    async def save_variables(self):
+        await update_user(
+            tg_id=self.chat_id,
+            blacklist=self.blacklist,
             pts=self._pts,
             ts=self._ts,
+            pinned_message_id=self.pinned_message_id,
         )
 
     async def load_values(self):
-        user_info = await get_user(self._chat_id)
-        self.POLLING_STATE = user_info.polling_state
-        self._blacklist = user_info.blacklist
+        user_info = await get_user(self.chat_id)
+        self.polling_state = user_info.polling_state
+        self.blacklist = user_info.blacklist
         self._ACCESS_TOKEN = user_info.vk_token
-        self._set_pts(user_info.pts)
-        self._set_ts(user_info.ts)
+        self.pinned_message_id = user_info.pinned_message_id
+        self.set_pts(user_info.pts)
+        self.set_ts(user_info.ts)
         return self
 
     @overload

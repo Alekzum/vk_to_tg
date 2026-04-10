@@ -49,7 +49,7 @@ async def get_old_messages(
     vk_bot: vkbottle.User,
     tg_client: MyTelegram,
 ) -> None:
-    user_id = tg_client.CHAT_ID
+    user_id = tg_client.chat_id
     config = Config(user_id)
     await config.load_values()
 
@@ -97,7 +97,7 @@ async def get_old_messages(
 
             await vk_bot.router.route(event, vk_bot.api)
 
-            if tg_client.CHAT_ID == OWNER_ID:
+            if tg_client.chat_id == OWNER_ID:
                 logger.debug(f"getLongPollHistory - {event=}, {fake_event=}")
             index += 1
             try:
@@ -105,9 +105,9 @@ async def get_old_messages(
             except asyncio.CancelledError:
                 break
 
-        config._set_ts(ts)
-        config._set_pts(pts)
-        await config.save_values()
+        config.set_ts(ts)
+        config.set_pts(pts)
+        await config.save_variables()
 
         kwargs = dict(
             ts=config.ts,

@@ -62,4 +62,4 @@ async def main():
 
 if __name__ == "__main__":
     logger.info("Запуск бота...")
-    asyncio.run(main(), debug=IS_LOUD)
+    asyncio.run(main(), debug=bool(IS_LOUD))

@@ -21,7 +21,7 @@ from .my_async_functions import (
 )
 
 from vk_api.longpoll import Event, VkEventType, VkMessageFlag
-from typing import TypedDict, Any, overload, Optional
+from typing import TypedDict, Any, overload, Optional, Literal
 import pathlib
 import pickle
 import pydantic
@@ -122,7 +122,7 @@ async def edit_message(
     tg_id_: Optional[int] = None,
     append: bool = False,
 ) -> None:
-    chat_id = tg_client.CHAT_ID
+    chat_id = tg_client.chat_id
     if vk_id_:
         tg_id = await get_tg_id(chat_id, vk_id_)
         if tg_id is None:
@@ -160,11 +160,11 @@ async def send_to_chat(
     # add_read_button: bool = False,
 ) -> Message:
     READ_FORMATTER = "read:{peer_id}:{msg_id}"
-    chat_id = tg_client.CHAT_ID
+    chat_id = tg_client.chat_id
     markup = None
     # if add_read_button:
     #     markup = make_button(
-    #         "Прочитать", READ_FORMATTER.format(peer_id=event.peer_id, msg_id=event.msg_id)
+    #         "Прочитать", READ_FORMATTER.format(peer_id=getattr(event, "peer_id"), msg_id=event.msg_id)
     #     )
     if read_button_data:
         markup = make_button(
@@ -237,7 +237,7 @@ async def on_message_edit(
 
 
 async def on_message_new(event: Event, api: VkApiMethod, tg_client: MyTelegram):
-    flags_cache[event.message_id] = event.flags
+    flags_cache[getattr(event, "message_id")] = getattr(event, "flags")
 
     text, in_block_list = await parse_event(event, api)
 
@@ -248,7 +248,9 @@ async def on_message_new(event: Event, api: VkApiMethod, tg_client: MyTelegram):
         messages_cache[pair_for_dict] = text
         full_messages_cache[pair_for_dict] = event
 
-    logger.debug("...", event_type=event.type, raw_event=(event, event.__dict__))
+    logger.debug(
+        "...", event_type=event.type, raw_event=(event, event.__dict__)
+    )
     if not in_block_list:
         logger.info(text)
     else:
@@ -264,10 +266,9 @@ async def on_real_all_outgoing_messages(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ):
     # chat = get_from_peer(api, event, conversations_, groups_, profiles_)
-    chat = await get_dialog_name(api, event.peer_id)
+    chat = await get_dialog_name(api, getattr(event, "peer_id"))
     string = f"Read all outgoing messages in chat {chat}"
 
-    logger.debug("...", event_type=event.type, raw_event=event.__dict__)
     logger.info(string)
 
     await send_to_chat(event, tg_client, string)
@@ -278,10 +279,9 @@ async def on_read_all_incoming_messages(
 ) -> None:
     # chat_id = tg_client.CHAT_ID
     # chat = get_from_peer(api, event, conversations_, groups_, profiles_)
-    chat = await get_dialog_name(api, event.peer_id)
+    chat = await get_dialog_name(api, getattr(event, "peer_id"))
     string = f"Read all incoming messages in chat {chat}"
 
-    logger.debug("...", event_type=event.type, raw_event=event.__dict__)
     logger.info(string)
 
     await send_to_chat(event, tg_client, string)
@@ -290,11 +290,10 @@ async def on_read_all_incoming_messages(
 async def on_message_react(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ) -> None:
-    chat = await get_dialog_name(api, event.peer_id)
+    chat = await get_dialog_name(api, getattr(event, "peer_id"))
     # chat = get_from_peer(api, event, conversations_, groups_, profiles_)
     string = f"Read all outgoing messages in chat {chat}"
 
-    logger.debug("...", event_type=event.type, raw_event=event.__dict__)
     logger.info(string)
 
     await send_to_chat(event, tg_client, string)
@@ -304,48 +303,51 @@ async def on_user_typing(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ) -> None:
     user_id = getattr(
-        event, "user_id", getattr(event, "from_user", event.peer_id)
+        event, "user_id", getattr(event, "from_user", getattr(event, "peer_id"))
     )
     from_user = await get_dialog_name(api, user_id)
     # from_user = get_from_user(api, event, profiles_)
     # in_chat = get_in_chat(api, event, conversations_, groups_)
 
-    string = f"""{from_user!r} is typing..."""
-    # d = {k: v for (k, v) in event.__dict__.items() if k[0] != "_"}
-    logger.debug("...", event_type=event.type, raw_event=event.__dict__)
-    logger.info(string)
+    logger.info(
+        "Someone is typing in chat",
+        user=from_user,
+    )
 
 
 async def on_user_typing_in_chat(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ) -> None:
     user_id = getattr(
-        event, "user_id", getattr(event, "from_user", event.peer_id)
+        event, "user_id", getattr(event, "from_user", getattr(event, "peer_id"))
     )
     chat_id = (
         (c_id + 2000000000)
         if ((c_id := getattr(event, "chat_id", None)) is not None)
-        else event.peer_id
+        else getattr(event, "peer_id")
     )  # because it's chat
     from_user = await get_dialog_name(api, user_id)
     in_chat = await get_dialog_name(api, chat_id)
     # from_user = get_from_user(api, event, profiles_)
     # in_chat = get_in_chat(api, event, conversations_, groups_)
 
-    string = f"""In chat {in_chat!r}({chat_id}) {from_user!r} is typing..."""
-    # d = {k: v for (k, v) in event.__dict__.items() if k[0] != "_"}
-    logger.debug("...", event_type=event.type, raw_event=event.__dict__)
-    logger.info(string)
+    logger.info(
+        "Someone is typing in chat",
+        user=from_user,
+        chat_title=in_chat,
+        chat_id=chat_id,
+    )
 
 
-async def on_message_counter_update(
+async def on_unread_messages_counter_update(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ) -> None:
     global _last_update_string
-    string = f"Unread messages count: {event.count}"
     # because it's always integer
+    unread_messages_count: int = getattr(event, "count")
+    string = f"Unread messages count: {unread_messages_count}"
     if _last_update_string != string:
-        await tg_client.send_text(string)
+        await tg_client.edit_pinned_text(string)
         _last_update_string = string
 
 
@@ -396,7 +398,6 @@ async def on_message_flag_interacted(
         raise
 
     save_caches()
-    logger.debug("...", event_type=event.type, raw_event=event.__dict__)
     logger.info(string)
     string += f'* <a href="{get_message_url(event)}">сообщение</a>'
 
@@ -494,19 +495,25 @@ flags_human = {
 
 
 @overload
-def flags_to_human(removed_flags: None, current_flags: None) -> None: ...
+def flags_to_human(removed_flags: set[VkMessageFlag]) -> list[str]: ...
 @overload
-def flags_to_human(
-    removed_flags: None, current_flags: set[VkMessageFlag | Any]
-) -> list[str]: ...
-@overload
-def flags_to_human(
-    removed_flags: set[VkMessageFlag], current_flags: None
-) -> list[str]: ...
+def flags_to_human(*, current_flags: set[VkMessageFlag]) -> list[str]: ...
 @overload
 def flags_to_human(
     removed_flags: set[VkMessageFlag], current_flags: set[VkMessageFlag]
 ) -> tuple[list[str], list[str]]: ...
+@overload
+def flags_to_human(
+    removed_flags: Literal[None], current_flags: set[VkMessageFlag]
+) -> list[str]: ...
+@overload
+def flags_to_human(
+    removed_flags: set[VkMessageFlag], current_flags: Literal[None]
+) -> list[str]: ...
+@overload
+def flags_to_human(
+    removed_flags: None = None, current_flags: None = None
+) -> None: ...
 def flags_to_human(
     removed_flags: Optional[set[VkMessageFlag]] = None,
     current_flags: Optional[set[VkMessageFlag]] = None,

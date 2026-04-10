@@ -33,12 +33,14 @@ tasks: dict[int, asyncio.Task] = dict()
 CHATS_PAGE_LEN = 6
 
 
+# region edit_message
 # read button
 @rt.edited_message()
 async def edit_message():
     pass
 
 
+# region read_message
 @rt.callback_query(
     F.data.startswith("read") & F.data.split(":")[1:].as_("data")
 )
@@ -84,7 +86,6 @@ async def read_message(
     msg = await answer("Reading message...")
     await api.messages.markAsRead(
         peer_id=peer_id,
-        # up_to_cmid=vk_message["conversation_message_id"],
     )
     if isinstance(callback_query.message, Message):
         await callback_query.message.edit_reply_markup()
@@ -92,6 +93,7 @@ async def read_message(
         await msg.delete()
 
 
+# region start_polls
 # Polling
 @rt.startup()
 async def start_polls(bot: Bot):
@@ -116,6 +118,7 @@ async def start_polls(bot: Bot):
             await msg.delete()
 
 
+# region stop_polls
 @rt.shutdown()
 async def stop_polls(bot: Bot):
     if not tasks:
@@ -138,10 +141,12 @@ async def stop_polls(bot: Bot):
 ecranize_regex = re.compile(r"\\([\`\*\_\{\}\[\]\\(\)\#\+\-\.\!])")
 
 
+# region get_tg_msg_text
 def get_tg_msg_text(message: Message) -> str:
     return ecranize_regex.sub("\\1", message.md_text)
 
 
+# region on_menu
 async def on_menu(dialog_manager: DialogManager, bot: Bot, *args, **kwargs):
     user = dialog_manager.event.from_user
     assert user
@@ -166,6 +171,7 @@ async def on_menu(dialog_manager: DialogManager, bot: Bot, *args, **kwargs):
     return dict(message="Получение сообщений уже остановлено")
 
 
+# region on_start_polling
 async def on_start_polling(dialog_manager: DialogManager, *args, **kwargs):
     user = dialog_manager.event.from_user
     assert user
@@ -186,6 +192,7 @@ async def on_start_polling(dialog_manager: DialogManager, *args, **kwargs):
     return dict(message="Получение сообщений уже идёт")
 
 
+# region maybe_reply_photo
 # TODO: combine reply and send segments
 # it's near to impossible - i'll need to use a lot of "if" statements
 ## Reply section
@@ -223,6 +230,7 @@ async def maybe_reply_photo(  # IDK ABOUT THIS.
     await dialog_manager.start(BotStates.Answer.SEND_MESSAGE, data=msg_data)
 
 
+# region maybe_reply_text
 async def maybe_reply_text(
     msg: Message, message_input: MessageInput, dialog_manager: DialogManager
 ):
@@ -251,6 +259,7 @@ async def maybe_reply_text(
     await dialog_manager.start(BotStates.Answer.SEND_MESSAGE, data=msg_data)
 
 
+# region maybe_send_photo
 ## Send section
 async def maybe_send_photo(  # IDK ABOUT THIS.
     msg: Message, message_input: MessageInput, dialog_manager: DialogManager
@@ -276,6 +285,7 @@ async def maybe_send_photo(  # IDK ABOUT THIS.
     )
 
 
+# region maybe_send_text
 async def maybe_send_text(
     msg: Message, message_input: MessageInput, dialog_manager: DialogManager
 ):

@@ -22,15 +22,16 @@ URL_RE = re.compile(
 @dataclass
 class MyTelegram:
     config: Config
-    CHAT_ID: int
+    chat_id: int
     tg: Client
+    pinned_message_id: int = -1
 
     def __init__(
         self, chat_id: int = OWNER_ID, name="PyrogramVkontakteToTelegramBot"
     ):
         self.config = cfg = Config(chat_id)
 
-        self.CHAT_ID = chat_id
+        self.chat_id = chat_id
         class_tg: Client | None = getattr(MyTelegram, "tg", None)
         self.tg = class_tg or Client(
             name=name,
@@ -59,6 +60,7 @@ class MyTelegram:
                 await tg.initialize()
 
         await self.config.load_values()
+        self.pinned_message_id = self.config.pinned_message_id
 
     @overload
     async def get_messages(self, message_ids: int) -> types.Message: ...
@@ -70,7 +72,7 @@ class MyTelegram:
         self, message_ids: int | list[int]
     ) -> types.Message | list[types.Message]:
         msg = await self.tg.get_messages(
-            chat_id=self.CHAT_ID,
+            chat_id=self.chat_id,
             message_ids=message_ids,
         )
         if msg is None:
@@ -91,7 +93,7 @@ class MyTelegram:
         link_preview_index: int = 0,
     ) -> types.Message:
         return await self.tg.send_message(
-            chat_id=self.CHAT_ID,
+            chat_id=self.chat_id,
             text=text,
             reply_markup=reply_markup,
             reply_parameters=reply_parameters,
@@ -122,7 +124,7 @@ class MyTelegram:
         link_preview_index: int = 0,
     ) -> types.Message:
         msg = await self.tg.edit_message_text(
-            chat_id=self.CHAT_ID,
+            chat_id=self.chat_id,
             message_id=msg_id,
             text=text,
             reply_markup=reply_markup,
@@ -133,6 +135,45 @@ class MyTelegram:
         if isinstance(msg, bool):
             logger.error("Invalid message type", msg_type=type(msg))
             raise TypeError(f"{type(msg)=}!")
+        return msg
+
+    async def edit_pinned_text(
+        self, text: str, reply_markup: Any = None, link_preview_index: int = 0
+    ):
+        async def _edit_pinned_text(msg: types.Message):
+            if msg.text == text:
+                return
+
+            return await self.edit_text(
+                msg_id=msg.id,
+                text=text,
+                reply_markup=reply_markup,
+                link_preview_index=link_preview_index,
+            )
+
+        if self.pinned_message_id != -1:
+            msg = await self.tg.get_messages(
+                chat_id=self.chat_id, message_ids=self.pinned_message_id
+            )
+            if msg is not None:
+                return await _edit_pinned_text(msg)
+
+        logger.debug(
+            "Didn't got pinned message",
+            chat_id=self.chat_id,
+            pinned_message_id=self.pinned_message_id,
+        )
+        msg = await self.send_text(
+            text=text,
+            reply_markup=reply_markup,
+            link_preview_index=link_preview_index,
+        )
+        await msg.pin(both_sides=True, disable_notification=True)
+        self.config.pinned_message_id = self.pinned_message_id = msg.id
+        await self.config.save_variables()
+        logger.debug(
+            "saved config for pinned_message_id", pinned_message_id=msg.id
+        )
         return msg
 
     async def stop(self):

@@ -13,10 +13,25 @@ def try_import(module):
 
 
 def wrap_loggers():
-    wrap_loggers_module("aiogram")
-    wrap_loggers_module("pyrogram")
-    wrap_loggers_module("vkbottle.modules")
-    wrap_loggers_module("utils", relative_to=Path())
+    for pair in (
+        ("aiogram",),
+        ("pyrogram",),
+        ("vkbottle.modules",),
+        (
+            "utils",
+            Path(),
+        ),
+        # ("httpcore",),
+        # ("urllib",),
+        ("urllib3",),
+        # ("asyncio",),
+    ):
+        try:
+            wrap_loggers_module(pair[0], *pair[1:])
+        except Exception:
+            logger.warning(
+                "Didn't wrapped module", module_name=pair[0], exc_info=True
+            )
 
 
 def wrap_loggers_module(

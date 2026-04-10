@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Iterable, Any, overload
+from typing import Iterable, Any, overload, Literal
 import aiosqlite
 import asyncio
 
@@ -15,6 +15,7 @@ class UserInfo(BaseModel):
     blacklist_: bytes = Field(b"", alias="blacklist")
     pts: int = 0
     ts: int = 0
+    pinned_message_id: int = -1
 
     @property
     def blacklist(self) -> set[str | int]:
@@ -45,7 +46,7 @@ async def init_db():
         await con.commit()
 
 
-async def add_user(tg_id: int, vk_token: str):
+async def init_user(tg_id: int, vk_token: str):
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -55,6 +56,21 @@ async def add_user(tg_id: int, vk_token: str):
         await con.commit()
 
 
+USER_KEYS = (
+    "tg_id",
+    "polling_state",
+    "vk_token",
+    "blacklist",
+    "pts",
+    "ts",
+    "pinned_message_id",
+)
+
+
+def parse_user(raw) -> UserInfo:
+    return UserInfo.model_validate({k: v for (k, v) in zip(USER_KEYS, raw)})
+
+
 @overload
 async def get_user[T](tg_id: int, default: T) -> UserInfo | T: ...
 @overload
@@ -62,71 +78,100 @@ async def get_user(tg_id: int, default: Any = _UNSET) -> UserInfo: ...
 async def get_user[T](tg_id: int, default: T | Any = _UNSET) -> UserInfo | T:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
-        await cur.execute(f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,))
-        result = await cur.fetchone()  # : tuple | None
+        await cur.execute(
+            f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,)
+        )
+        raw = await cur.fetchone()  # : tuple | None
 
-    if result is None and default is _UNSET:
+    if raw is None and default is _UNSET:
         raise KeyError(f"Didn't found user with id = {tg_id}")
-    elif result is None:
+    elif raw is None:
         return default
 
-    k = "tg_id,polling_state,vk_token,blacklist,pts,ts".split(",")
-    d = {k: v for (k, v) in zip(k, result)}
-    user = UserInfo(**d)
-    # user.()
+    user = parse_user(raw)
     return user
 
 
 async def get_users() -> list[UserInfo]:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
-        await cur.execute(f"""SELECT * FROM {TABLE_NAME}""", ())
-        result_: Any = await cur.fetchall()  # : list[tuple]
+        await cur.execute(
+            f"""SELECT {",".join(USER_KEYS)} FROM {TABLE_NAME}""", ()
+        )
+        result_: Any = await cur.fetchall()
     result = list(result_) if result_ is not None else list()
-    
-    keys = "tg_id,polling_state,vk_token,blacklist,pts,ts".split(",")
-    # keys: list[str] = list(UserInfo.model_fields.keys())
-    raw_list = [
-        {key: value for (key, value) in zip(keys, values)}
-        for values in result
-        if values
-    ]
-    users = [UserInfo(**d) for d in raw_list]
-    return users
+
+    return [parse_user(raw) for raw in result if raw]
 
 
-async def save_user(
+async def update_user(
     tg_id: int,
-    # polling_state: bool = False,
-    # vk_token: str = "",
-    items: Iterable[str | int] | None = None,
-    pts: int = 0,
-    ts: int = 0,
+    blacklist: str | Iterable[str | int] | None | Any = _UNSET,
+    pts: int | None | Any = _UNSET,
+    ts: int | None | Any = _UNSET,
+    pinned_message_id: int | None | Any = _UNSET,
 ):
-    item = _srl_blacklist(items or [""])
+    values: dict[
+        Literal[
+            "blacklist",
+            "pts",
+            "ts",
+            "pinned_message_id",
+        ],
+        Any,
+    ] = dict()
+    if blacklist is not _UNSET:
+        b_list = blacklist if blacklist is not None else ""
+        b_list = [b_list] if isinstance(b_list, (str, int)) else b_list
+        blacklist_glob = _srl_blacklist(b_list)
+        values["blacklist"] = blacklist_glob
+    if pts is not _UNSET:
+        values["pts"] = pts
+    if ts is not _UNSET:
+        values["ts"] = ts
+    if pinned_message_id is not _UNSET:
+        values["pinned_message_id"] = pinned_message_id
+
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
-            f"""UPDATE {TABLE_NAME} SET blacklist=?, pts=?, ts=? WHERE tg_id=?""",
+            f"""UPDATE {TABLE_NAME} SET {", ".join("{}=?".format(x) for x in values.keys())} WHERE tg_id=?""",
             (
-                item,
-                pts,
-                ts,
+                *values.values(),
                 tg_id,
             ),
         )
         await con.commit()
 
-def _srl_blacklist(items: Iterable[str | int]) -> bytes:
-    if not items:
+
+async def delete_user(
+    tg_id: int,
+):
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"""DELETE FROM {TABLE_NAME} WHERE tg_id=?""",
+            (tg_id,),
+        )
+        await con.commit()
+
+
+def _srl_blacklist(items: str | int | Iterable[str | int]) -> bytes:
+    if len(str(items)) == 0:
         return b""
-    return gzip.compress(_BLACKLIST_SEP.join([str(i) for i in items]).encode("utf-8"))
+    items = [items] if isinstance(items, (str, int)) else items
+    return gzip.compress(
+        _BLACKLIST_SEP.join(str(i) for i in items).encode("utf-8")
+    )
 
 
 def _drl_blacklist(item: bytes) -> set[str | int]:
     if not item:
         return set()
-    tmp = set(int(i) if i.removeprefix("-").isdigit() else i for i in gzip.decompress(item).decode("utf-8").split(_BLACKLIST_SEP))
+    tmp = set(
+        int(i) if i.removeprefix("-").isdigit() else i
+        for i in gzip.decompress(item).decode("utf-8").split(_BLACKLIST_SEP)
+    )
     return tmp
 
 
@@ -166,7 +211,9 @@ async def get_token(tg_id: int) -> None | str:
         )
         result = await cur.fetchone()  # : tuple[str] | None
     to_return_ = tuple(result) if result is not None else None
-    to_return: str | None = to_return_[0] if isinstance(to_return_, tuple) else None
+    to_return: str | None = (
+        to_return_[0] if isinstance(to_return_, tuple) else None
+    )
     return to_return
 
 
@@ -174,7 +221,8 @@ async def get_state(tg_id: int) -> None | bool:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
-            f"""SELECT polling_state FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,)
+            f"""SELECT polling_state FROM {TABLE_NAME} WHERE tg_id=?""",
+            (tg_id,),
         )
         result = await cur.fetchone()  # : tuple[int] | None
     to_return_ = tuple(result) if result is not None else None
@@ -245,9 +293,7 @@ async def get_polling_state(tg_id: int) -> bool | None:
     return to_return
 
 
-async def set_polling_state(
-        tg_id: int, polling_state: bool
-) -> None:
+async def set_polling_state(tg_id: int, polling_state: bool) -> None:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -261,12 +307,27 @@ async def set_polling_state(
 
 
 async def test():
-    UID = -100
-    VK_TOKEN = ""
-    BLACKLIST1 = "something"
+    uid = -100
+    test_vk_token = ""
+    blacklist_item1 = "something"
     BLACKLIST2 = ""
-    await add_user(UID, "")
+    usr = await get_user(tg_id=uid, default=None)
+    if usr is None:
+        await init_user(tg_id=uid, vk_token=test_vk_token)
+    else:
+        print(f"! {usr=}")
+    await update_user(tg_id=uid, blacklist=blacklist_item1)
+    usr = await get_user(tg_id=uid)
+    assert blacklist_item1 in usr.blacklist, f"{usr.blacklist=}"
+    await update_user(tg_id=uid, blacklist=BLACKLIST2)
+    usr = await get_user(tg_id=uid)
+    assert len(usr.blacklist) == 0, f"{usr.blacklist=}"
+    await delete_user(tg_id=uid)
+    usr = await get_user(tg_id=uid, default=None)
+    assert usr is None, f"{usr=}"
 
+
+NOTSET = object()
 
 if __name__ == "__main__":
     asyncio.run(test())

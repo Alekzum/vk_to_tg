@@ -27,7 +27,7 @@ async def save_longpoll_info(
     if vk_longpoll.pts:
         config._pts = vk_longpoll.pts
 
-    await config.save_values()
+    await config.save_variables()
 
 
 async def load_longpoll_info(chat_id: int, vk_longpoll: AsyncVkLongPoll):
@@ -75,7 +75,7 @@ async def get_client_and_longpoll(
         except KeyError:
             raise
         except Exception as ex:
-            logger.warning(f"No longpoll: {ex}")
+            logger.warning(f"No longpoll: {ex}", exc_info=True)
             await asyncio.sleep(WAIT_TIME)
         else:
             break
