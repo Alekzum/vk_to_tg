@@ -13,6 +13,7 @@ from httpx import NetworkError, TimeoutException, RemoteProtocolError
 
 from .. import telegram_bot
 from .my_async_functions import get_dialog_name
+# from ..telegram_bot.utils.my_typings import get_dialog_name, get_vk_api
 
 from . import handlers
 from .utils import beautify_print
@@ -201,6 +202,7 @@ async def get_old_messages(
     result: dict = {"more": 1}
     index = 0
     while "more" in result and result["more"]:
+        temp_index = index
         result = await api.messages.getLongPollHistory(
             ts=vk_longpoll.ts,
             pts=vk_longpoll.pts,
@@ -229,23 +231,49 @@ async def get_old_messages(
             else:
                 fake_event = Event(event)
 
-            await handle(fake_event, api, tg_client)
+            need_to_log = await handle(fake_event, api, tg_client)
+            await save_longpoll_info(
+                user_id, vk_longpoll.ts, vk_longpoll.pts, log=False
+            )
+            if need_to_log:
+                index += 1
+                logger.debug(
+                    "ts+pts",
+                    ts=vk_longpoll.ts,
+                    pts=vk_longpoll.pts,
+                    user_id=user_id,
+                    index=index,
+                )
+                await asyncio.sleep(0)
             if tg_client.chat_id == OWNER_ID:
                 logger.debug(f"getLongPollHistory - {event=}, {fake_event=}")
-            index += 1
-            try:
-                await asyncio.sleep(0)
-            except asyncio.CancelledError:
-                break
+            await asyncio.sleep(0)
+
+        if index:
+            logger.debug(
+                "Processed batch of updates",
+                user_id=user_id,
+                count_total=index,
+                count_batch=index - temp_index,
+            )
+            await save_longpoll_info(
+                user_id, vk_longpoll.ts, vk_longpoll.pts, log=False
+            )
+            if user_id == OWNER_ID:
+                logger.info(
+                    "ts+pts",
+                    ts=vk_longpoll.ts,
+                    pts=vk_longpoll.pts,
+                    user_id=user_id,
+                )
 
         vk_longpoll.server = server
         vk_longpoll.ts = ts
         vk_longpoll.key = key
         vk_longpoll.pts = pts
-        await save_longpoll_info(tg_client.chat_id, vk_longpoll, log=True)
-
-    if index:
-        logger.debug(f"Processed {index} updates", user_id=user_id)
+        await save_longpoll_info(
+            tg_client.chat_id, vk_longpoll.ts, vk_longpoll.pts, log=True
+        )
 
 
 async def handle(
@@ -288,6 +316,7 @@ async def handle(
 
 async def main(user_id: int):
     logger.debug("Получение вк клиента и longpoll'а...", user_id=user_id)
+    # vk_client = await get_vk_api(user_id)
     vk_client, vk_longpoll = await get_client_and_longpoll(user_id)
     api = vk_client.get_api()
 
@@ -295,18 +324,32 @@ async def main(user_id: int):
     logger.debug("Бот стартует...", user_id=user_id)
     await tg_client.init()
 
-    await vk_longpoll.update_longpoll_server(update_ts=True)
+    ts, pts = await load_longpoll_info(
+        user_id, default_ts=vk_longpoll.ts, default_pts=vk_longpoll.pts
+    )
+    logger.info("Saved", ts=ts, pts=pts, user_id=user_id)
+    await vk_longpoll.update_longpoll_server(update_pts=False)
+    vk_longpoll.ts, vk_longpoll.pts = ts, pts
+
+    await vk_longpoll.update_longpoll_server(update_pts=True)
+    assert vk_longpoll.ts is not None, f"vk_longpoll.ts is None for {user_id=}"
+    assert vk_longpoll.pts is not None, (
+        f"vk_longpoll.pts is None for {user_id=}"
+    )
     server_ts, server_pts = vk_longpoll.ts, vk_longpoll.pts
     logger.info("On server", ts=server_ts, pts=server_pts, user_id=user_id)
-    server_ts = server_ts if isinstance(server_ts, int) else 32
 
-    await load_longpoll_info(user_id, vk_longpoll)
-    logger.info(
-        "Saved", ts=vk_longpoll.ts, pts=vk_longpoll.pts, user_id=user_id
+    ts, pts = await load_longpoll_info(
+        user_id, default_ts=vk_longpoll.ts, default_pts=vk_longpoll.pts
     )
-    # if server_ts <
+    logger.info("Saved", ts=ts, pts=pts, user_id=user_id)
+    await vk_longpoll.update_longpoll_server(update_pts=False)
+    vk_longpoll.ts, vk_longpoll.pts = ts, pts
+    assert ts is not None, f"ts is None for {user_id=}"
+    assert pts is not None, f"pts is None for {user_id=}"
+
     logger.info(
-        f"Bot is getting last {server_ts - (vk_longpoll.ts if isinstance(vk_longpoll.ts, int) else 32)} events",
+        f"Bot is getting last {server_pts - pts} events",
         user_id=user_id,
     )
     await get_old_messages(api, vk_longpoll, tg_client)
@@ -322,6 +365,9 @@ async def main(user_id: int):
             events = await vk_longpoll.check()
             for event in events:
                 need_to_log = await handle(event, api, tg_client)
+                await save_longpoll_info(
+                    user_id, vk_longpoll.ts, vk_longpoll.pts, log=False
+                )
                 if need_to_log:
                     index += 1
                     logger.debug(
@@ -333,8 +379,10 @@ async def main(user_id: int):
                     )
 
                 await asyncio.sleep(0)
+            # await save_longpoll_info(
+            #     user_id, vk_longpoll.ts, vk_longpoll.pts, log=False
+            # )
             if index:
-                await save_longpoll_info(user_id, vk_longpoll, log=False)
                 logger.debug(f"Processed {index} updates", user_id=user_id)
                 if user_id == OWNER_ID:
                     logger.info(
@@ -372,5 +420,5 @@ async def main(user_id: int):
 
     await tg_client.stop()
 
-    await save_longpoll_info(user_id, vk_longpoll, log=True)
+    await save_longpoll_info(user_id, vk_longpoll.ts, vk_longpoll.pts, log=True)
     logger.info(f"ts={vk_longpoll.ts}, pts={vk_longpoll.pts}")

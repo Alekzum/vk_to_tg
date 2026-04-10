@@ -283,7 +283,9 @@ def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
         for chunk in iter(raw_chunks.split("&")):
             argument = chunk.split("=")[0]
             if argument in arguments_to_replace:
-                url_result += argument + "=" + arguments_to_replace[argument] + "&"
+                url_result += (
+                    argument + "=" + arguments_to_replace[argument] + "&"
+                )
                 continue
             url_result += chunk + "&"
         return url_result

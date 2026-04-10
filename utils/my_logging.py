@@ -14,12 +14,12 @@ LOG_DIR = "logs"
 LOG_FILE = "log.log"
 
 
-IS_DEBUG = bool(
+IS_DEBUG = int(
     sys.argv[1:]
     and "--debug" in sys.argv[1:]
     or dotenv.get_key(".env", "IS_DEBUG")
 )
-IS_LOUD = bool(
+IS_LOUD = int(
     sys.argv[1:]
     and "--loud" in sys.argv[1:]
     or dotenv.get_key(".env", "IS_LOUD")
@@ -153,7 +153,7 @@ root_logger = structlog.wrap_logger(root_logger)
 
 logger = structlog.get_logger(__name__)
 
-logger.info("Logging module loaded", custom_level=LEVEL)
+logger.info("Logging module loaded", custom_level=LEVEL, is_debug=IS_DEBUG, is_loud=IS_LOUD)
 
 MUTEDICT = {
     "utils": logging.DEBUG,

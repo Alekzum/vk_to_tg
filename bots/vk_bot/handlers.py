@@ -3,7 +3,9 @@
 # from utils.interface.vk_messages import get_tg_id, add_pair
 
 from ..telegram_bot.classes import MyTelegram
+from .classes import Message as VkMessage
 from pyrogram.types import Message
+from pyrogram import errors as pyro_errors
 from utils.my_vk_api import VkApiMethod
 from utils.my_keyboard import make_button
 from .utils import (
@@ -19,7 +21,7 @@ from .my_async_functions import (
     get_chat_name,
     get_dialog_name,
 )
-
+from utils.interface import vk_interface
 from vk_api.longpoll import Event, VkEventType, VkMessageFlag
 from typing import TypedDict, Any, overload, Optional, Literal
 import pathlib
@@ -28,6 +30,8 @@ import pydantic
 
 from pydantic import BaseModel, Field
 from utils.my_logging import getLogger
+
+import asyncio
 
 
 class Cache[KEY, VALUE](BaseModel):
@@ -156,7 +160,7 @@ async def send_to_chat(
     tg_client: MyTelegram,
     string: str,
     save: bool = True,
-    read_button_data: Optional[ReadData] = None,
+    read_button_data: Optional[ReadData | bool] = None,
     # add_read_button: bool = False,
 ) -> Message:
     READ_FORMATTER = "read:{peer_id}:{msg_id}"
@@ -166,7 +170,19 @@ async def send_to_chat(
     #     markup = make_button(
     #         "Прочитать", READ_FORMATTER.format(peer_id=getattr(event, "peer_id"), msg_id=event.msg_id)
     #     )
-    if read_button_data:
+    peer_id = getattr(event, "peer_id", None)
+    vk_msg_id = getattr(event, "message_id", None)
+    if read_button_data is True:
+        if peer_id and vk_msg_id:
+            markup = make_button(
+                "Прочитать",
+                READ_FORMATTER.format(
+                    peer_id=peer_id, msg_id=vk_msg_id
+                ),
+            )
+        else:
+            logger.warning("didn't get items for button", peer_id=peer_id, vk_msg_id=vk_msg_id)
+    elif read_button_data:
         markup = make_button(
             "Прочитать",
             READ_FORMATTER.format(
@@ -177,9 +193,15 @@ async def send_to_chat(
     url_idx = find_first_message_media_url_index(string)
     logger.debug("maybe found url index", url_idx=url_idx)
 
-    if (vk_msg_id := getattr(event, "message_id", None)) and (
+    if vk_msg_id and (
         tg_id := await get_tg_id(chat_id, vk_msg_id)
     ):
+        text_info = await tg_client.tg.parser.parse(string)
+        old_msg = await tg_client.get_messages(int(tg_id))
+        if old_msg.text == text_info["message"]:
+            logger.debug("double message! skip")
+            return old_msg
+        
         msg = await tg_client.reply_text(
             msg_id=int(tg_id),
             text=string,
@@ -196,10 +218,15 @@ async def send_to_chat(
 
     if msg and event.message_id:
         binds_vk_to_tg[event.message_id] = msg.id
-        await add_pair(msg.id, chat_id, event.message_id)
+        await add_pair(
+            msg.id,
+            chat_id,
+            event.message_id,
+            vk_peer_id=getattr(event, "peer_id"),
+        )
 
     elif event.message_id:
-        logger.warning(f"{msg!r} (caused with {string=})")
+        logger.warning("no msg", msg=msg, string=string, event_object=event)
     return msg
 
 
@@ -248,18 +275,25 @@ async def on_message_new(event: Event, api: VkApiMethod, tg_client: MyTelegram):
         messages_cache[pair_for_dict] = text
         full_messages_cache[pair_for_dict] = event
 
-    logger.debug(
-        "...", event_type=event.type, raw_event=(event, event.__dict__)
-    )
     if not in_block_list:
         logger.info(text)
+        logger.debug(
+            "new message",
+            event_type=event.type,
+            raw_event=(event, event.__dict__),
+        )
     else:
+        logger.debug(
+            "new ignored message",
+            event_type=event.type,
+            raw_event=(event, event.__dict__),
+        )
         return
 
-    if event.from_me:
-        await send_to_chat(event, tg_client, text)
-    else:
+    if VkMessageFlag.UNREAD in event.message_flags and not event.from_me:
         await send_to_chat(event, tg_client, text, read_button_data=read_data)
+    else:
+        await send_to_chat(event, tg_client, text)
 
 
 async def on_real_all_outgoing_messages(
@@ -277,14 +311,92 @@ async def on_real_all_outgoing_messages(
 async def on_read_all_incoming_messages(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ) -> None:
-    # chat_id = tg_client.CHAT_ID
-    # chat = get_from_peer(api, event, conversations_, groups_, profiles_)
-    chat = await get_dialog_name(api, getattr(event, "peer_id"))
+    logger = getLogger(
+        __name__ + ".on_read_incoming", chat_id=tg_client.chat_id
+    )
+    chat_peer_id = getattr(event, "peer_id")
+    chat = await get_dialog_name(api, chat_peer_id)
     string = f"Read all incoming messages in chat {chat}"
 
-    logger.info(string)
+    last_read_message: int = getattr(event, "local_id")
+
+    logger.info(
+        string,
+    )
 
     await send_to_chat(event, tg_client, string)
+
+    async def inner_iter():
+        logger = getLogger(
+            __name__ + ".on_read_incoming.iterator", chat_id=tg_client.chat_id
+        )
+
+        # somehow get first message with button
+        unread_messages = await vk_interface.get_unread_messages(
+            tg_client.chat_id
+        )
+        # messages = await vk_messages.get_last_vk_id(
+        #     tg_client.chat_id, as_generator=True
+        # )
+        key = tg_client.chat_id
+        is_iterating = on_read_all_incoming_messages_keys.get(key, False)
+        while is_iterating:
+            await asyncio.sleep(1)
+        try:
+            for message in unread_messages:
+                # raw_vk_messages = await api.messages.getById(
+                #     message_ids=message.vk_id
+                # )
+                # vk_message = VkMessage.model_validate(
+                #     raw_vk_messages["items"][0]
+                # )
+                if message.vk_peer_id != chat_peer_id:
+                    # logger.debug("Skip from not-this chat")
+                    continue
+                # message.
+                elif message.vk_id > last_read_message:
+                    # logger.debug("Skip - message is not read")
+                    continue
+                saved_msg = await vk_interface.get_message_by_vk_id(
+                    tg_chat_id=tg_client.chat_id, vk_msg_id=message.vk_id
+                )
+                if saved_msg is None:
+                    logger.debug(
+                        "skip empty",
+                        tg_id=message.tg_id,
+                        vk_msg_id=message.tg_id,
+                    )
+                    continue
+                elif saved_msg.is_read:
+                    logger.debug("skip read", tg_id=message.tg_id)
+                    continue
+
+                logger.debug("removing markup", tg_id=message.tg_id)
+                try:
+                    await tg_client.edit_reply_markup(msg_id=message.tg_id)
+                except (
+                    pyro_errors.MessageNotModified,
+                    pyro_errors.MessageIdInvalid,
+                ):
+                    pass
+                await vk_interface.mark_vk_msg_as_read(
+                    tg_chat_id=tg_client.chat_id, vk_msg_id=message.vk_id
+                )
+
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            logger.debug("cancelled")
+            on_read_all_incoming_messages_keys[key] = False
+
+    new_task = asyncio.create_task(inner_iter())
+    on_read_all_incoming_messages_tasks.append(new_task)
+    new_task.add_done_callback(
+        lambda _: on_read_all_incoming_messages_tasks.remove(new_task)
+    )
+
+
+on_read_all_incoming_messages_tasks: list[asyncio.Task] = list()
+on_read_all_incoming_messages_keys: dict[int, bool] = dict()
 
 
 async def on_message_react(

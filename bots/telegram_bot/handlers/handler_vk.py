@@ -10,11 +10,13 @@ from aiogram_dialog.widgets.kbd import (
 )
 from aiogram_dialog.widgets.input import MessageInput
 
-from ..utils.my_vk import get_vk_api
+# from ..utils.my_vk import get_vk_api
+from ..utils.my_typings import get_vk_api, get_dialog_name
 from ..utils.fsm_states import BotStates
-from ...vk_bot.my_async_functions import get_dialog_name
+
+# from ...vk_bot.my_async_functions import get_dialog_name
 from utils.interface import get_users
-from utils.interface.vk_messages import get_vk_id
+from utils.interface import vk_interface
 from utils.interface.user_settings import (
     set_polling_state,
     get_polling_state,
@@ -61,31 +63,33 @@ async def read_message(
     usr = callback_query.from_user
     # usr = msg.from_user.id
     logger.debug("read_message", user_id={usr.id})
-    peer_id, msg_id = int(data[0]), int(data[1])
+    vk_peer_id, vk_msg_id = int(data[0]), int(data[1])
 
     api = await get_vk_api(user_id=usr.id)
 
-    conversations = await api.messages.getConversationsById(peer_ids=peer_id)
-    conversation = conversations["items"][0] if conversations["items"] else None
+    if vk_peer_id is None:
+        return await answer("Not found conversation")
+    conversation = await api.get_conversation(peer_id=vk_peer_id)
     if not conversation:
         return await answer("Not found conversation")
-    elif conversation["in_read"] >= msg_id:
+    elif conversation["in_read"] >= vk_msg_id:
         if isinstance(callback_query.message, Message):
             await callback_query.message.edit_reply_markup()
         return await answer("Message already read")
 
-    vk_messages = await api.messages.getById(message_ids=msg_id)
-
-    vk_message: dict | None = (
-        vk_messages["items"][0] if vk_messages["items"] else None
-    )
+    vk_message = await api.get_message(message_ids=[vk_msg_id])
     if not vk_message:
-        if isinstance(callback_query.message, Message):
-            await callback_query.message.edit_reply_markup()
         return await answer("Not found message")
+    elif vk_message[0].peer_id != vk_peer_id:
+        return await answer("Invalid message's peer_id (somehow)")
+
     msg = await answer("Reading message...")
-    await api.messages.markAsRead(
-        peer_id=peer_id,
+    await api.read_message(peer_id=vk_peer_id, message_id=vk_msg_id)
+    if isinstance(callback_query.message, Message):
+        await callback_query.message.edit_reply_markup()
+
+    await vk_interface.mark_vk_msg_as_read(
+        tg_chat_id=usr.id, vk_msg_id=vk_msg_id
     )
     if isinstance(callback_query.message, Message):
         await callback_query.message.edit_reply_markup()
@@ -124,18 +128,10 @@ async def stop_polls(bot: Bot):
     if not tasks:
         return
 
-    # users = await get_users()
-
-    # for chat_id in tasks.keys():
-    #     await set_polling_state(chat_id, False)
-
     for task in tasks.values():
         task.cancel("stopping bot...")
 
     await asyncio.gather(*tasks.values(), return_exceptions=False)
-
-    # for user in users:
-    #     await set_polling_state(user.tg_id, user.polling_state)
 
 
 ecranize_regex = re.compile(r"\\([\`\*\_\{\}\[\]\\(\)\#\+\-\.\!])")
@@ -209,13 +205,15 @@ async def maybe_reply_photo(  # IDK ABOUT THIS.
     # usr = msg.from_user.id
     logger.debug("maybe_answer", user_id={usr.id})
 
-    vk_id = await get_vk_id(tg_chat_id=msg.chat.id, tg_msg_id=rtm.message_id)
+    vk_id = await vk_interface.get_vk_id(
+        tg_chat_id=msg.chat.id, tg_msg_id=rtm.message_id
+    )
     if vk_id is None:
         return await msg.answer("Я не знаю такое сообщение :(")
 
     api = await get_vk_api(user_id=usr.id)
 
-    vk_message = await api.messages.getById(message_ids=vk_id)
+    vk_message = await api.get_message(message_ids=vk_id)
 
     msg_data = dict(
         mgs_act="reply",
@@ -223,8 +221,8 @@ async def maybe_reply_photo(  # IDK ABOUT THIS.
         mgs_photos=max(photos, key=lambda x: x.height).file_id,
         mgs_caption=get_tg_msg_text(msg),
         mgs_to=vk_id,
-        msg_in=vk_message["items"][0]["peer_id"],
-        mgs_name=await get_dialog_name(api, vk_message["items"][0]["peer_id"]),
+        msg_in=vk_message.peer_id,
+        mgs_name=await get_dialog_name(api, vk_message.peer_id),
     )
     dialog_manager.dialog_data.update(msg_data)
     await dialog_manager.start(BotStates.Answer.SEND_MESSAGE, data=msg_data)
@@ -241,19 +239,21 @@ async def maybe_reply_text(
     # usr = msg.from_user.id
     logger.debug("maybe_answer", user_id={usr.id})
 
-    vk_id = await get_vk_id(tg_chat_id=msg.chat.id, tg_msg_id=rtm.message_id)
+    vk_id = await vk_interface.get_vk_id(
+        tg_chat_id=msg.chat.id, tg_msg_id=rtm.message_id
+    )
     if vk_id is None:
         return await msg.answer("Я не знаю такое сообщение :(")
 
     api = await get_vk_api(user_id=usr.id)
-    vk_message = await api.messages.getById(message_ids=vk_id)
+    vk_message = await api.get_message(message_ids=vk_id)
     msg_data = dict(
         msg_act="reply",
         msg_type="text",
         msg_text=get_tg_msg_text(msg),
         msg_to=vk_id,
-        msg_in=vk_message["items"][0]["peer_id"],
-        msg_name=await get_dialog_name(api, vk_message["items"][0]["peer_id"]),
+        msg_in=vk_message.peer_id,
+        msg_name=await get_dialog_name(api, vk_message.peer_id),
     )
     dialog_manager.dialog_data.update(msg_data)
     await dialog_manager.start(BotStates.Answer.SEND_MESSAGE, data=msg_data)

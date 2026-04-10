@@ -1,4 +1,4 @@
-from utils.interface.vk_messages import get_tg_id, get_vk_id, add_pair
+from utils.interface.vk_interface import get_tg_id, get_vk_id, add_pair
 
 # from utils.my_classes import TgMessage
 # from utils.config import CHATS_BLACKLIST

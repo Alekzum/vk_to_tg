@@ -1,4 +1,4 @@
-from typing import NamedTuple
+from typing import NamedTuple, Generator
 import aiosqlite
 import pathlib
 from utils.my_logging import getLogger
@@ -7,8 +7,10 @@ from utils.my_logging import getLogger
 class MyPair(NamedTuple):
     tg_id: int
     tg_chat_id: int
-    vk_ig: int
+    vk_id: int
     is_sferum: int
+    is_read: bool
+    vk_peer_id: bool
 
 
 DB_PATH = ["data", "database.db"]
@@ -26,20 +28,34 @@ async def init_db():
     tg_msg_id INTEGER NOT NULL,
     tg_chat_id INTEGER NOT NULL,
     vk_id INTEGER NOT NULL,
-    is_sferum INTEGER DEFAULT 0
+    is_sferum INTEGER DEFAULT 0,
+    is_read INTEGER DEFAULT 0,
+    vk_peer_id INTEGER NOT NULL,
 )"""
         )
         await con.commit()
 
 
 async def add_pair(
-    tg_msg_id: int, tg_chat_id: int, vk_id: int, is_sferum: bool = False
+    tg_msg_id: int,
+    tg_chat_id: int,
+    vk_id: int,
+    vk_peer_id: int,
+    is_sferum: bool = False,
+    is_read: bool = False,
 ):
     async with aiosqlite.connect(_DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
-            f"""INSERT INTO {TABLE_NAME} (tg_msg_id, tg_chat_id, vk_id, is_sferum) VALUES (?, ?, ?, ?)""",
-            (tg_msg_id, tg_chat_id, vk_id, int(is_sferum)),
+            f"""INSERT INTO {TABLE_NAME} (tg_msg_id, tg_chat_id, vk_id, is_sferum, vk_peer_id, is_read) VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                tg_msg_id,
+                tg_chat_id,
+                vk_id,
+                int(is_sferum),
+                vk_peer_id,
+                int(is_read),
+            ),
         )
         await con.commit()
 
@@ -80,6 +96,45 @@ async def get_tg_id(tg_chat_id: int, vk_id: int) -> None | int:
     return to_return
 
 
+async def get_unread_messages(tg_chat_id: int) -> Generator[MyPair]:
+    async with aiosqlite.connect(_DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"SELECT * FROM {TABLE_NAME} WHERE tg_chat_id=? AND is_read=? ORDER BY tg_msg_id DESC",
+            (tg_chat_id, 0),
+        )
+        result = await cur.fetchall()  # : list[tuple[int, int]]
+    gen: Generator[MyPair, None, None] = (MyPair(*p) for p in result)
+    return gen
+
+
+async def get_message_by_vk_id(
+    tg_chat_id: int, vk_msg_id: int
+) -> MyPair | None:
+    async with aiosqlite.connect(_DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"SELECT * FROM {TABLE_NAME} WHERE tg_chat_id=? AND vk_id=?",
+            (tg_chat_id, vk_msg_id),
+        )
+        result = await cur.fetchone()  # : list[tuple[int, int]]
+    to_return = MyPair(*result) if result else None
+    return to_return
+
+
+async def mark_vk_msg_as_read(tg_chat_id: int, vk_msg_id: int) -> None:
+    async with aiosqlite.connect(_DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"UPDATE {TABLE_NAME} SET is_read=1 WHERE tg_chat_id=? AND vk_id=?",
+            (
+                tg_chat_id,
+                vk_msg_id,
+            ),
+        )
+        await con.commit()
+
+
 async def get_last_vk_id(tg_chat_id: int) -> None | int:
     async with aiosqlite.connect(_DB_PATH) as con:
         cur = await con.cursor()
@@ -95,7 +150,15 @@ async def get_last_vk_id(tg_chat_id: int) -> None | int:
     return to_return
 
 
-async def get_all_ids(tg_chat_id: int) -> None | list[MyPair]:
+async def get_all_ids(tg_chat_id: int) -> Generator[MyPair]:
+    """Get all *telegram* messages in chat
+
+    Args:
+        tg_chat_id (int):
+
+    Returns:
+        list[MyPair]:
+    """
     async with aiosqlite.connect(_DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -103,7 +166,5 @@ async def get_all_ids(tg_chat_id: int) -> None | list[MyPair]:
             (tg_chat_id,),
         )
         result = await cur.fetchall()  # : list[tuple[int, int]]
-    # to_return_ = tuple(result) if result is not None else None
-    # to_return: str | None = to_return_[0] if isinstance(to_return_, tuple) else None
-    to_return = [MyPair(*p) for p in result]
-    return to_return
+    gen = (MyPair(*p) for p in result)
+    return gen

@@ -825,8 +825,8 @@ class AsyncVkLongPoll(object):
     def _parse_event(self, raw_event):
         return self.DEFAULT_EVENT_CLASS(raw_event)
 
-    async def update_longpoll_server(self, update_ts: bool = True) -> None:
-        values = {"lp_version": "3", "need_pts": self.pts}
+    async def update_longpoll_server(self, update_pts: bool = True) -> None:
+        values = {"lp_version": "3", "need_pts": update_pts}
 
         if self.group_id:
             values["group_id"] = self.group_id
@@ -840,10 +840,9 @@ class AsyncVkLongPoll(object):
 
         self.url = "https://" + (self.server or "")
 
-        if update_ts:
-            self.ts = response["ts"]
-            if self.pts:
-                self.pts = response.get("pts", self.pts)
+        self.ts = response["ts"]
+        if update_pts:
+            self.pts = response["pts"]
 
     async def check(self) -> list[Event]:
         """Получить события от сервера один раз
@@ -893,7 +892,7 @@ class AsyncVkLongPoll(object):
             self.ts = response["ts"]
 
         elif response["failed"] == 2:
-            await self.update_longpoll_server(update_ts=False)
+            await self.update_longpoll_server(update_pts=False)
 
         elif response["failed"] == 3:
             await self.update_longpoll_server()

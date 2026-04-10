@@ -92,6 +92,25 @@ class MyTelegram:
         reply_parameters: types.ReplyParameters | Any = None,
         link_preview_index: int = 0,
     ) -> types.Message:
+        parsed = await self.tg.parser.parse(text, mode=self.tg.parse_mode)
+        message = len(parsed["message"] or [])
+        entities = len(parsed["entities"] or [])
+        m = 4000
+        if message > m or entities > 50:
+            chunks = (
+                text[x * m : ((x + 1) * m)] for x in range(len(text) // m)
+            )
+            msg = None
+            for chunk in chunks:
+                msg = await self.send_text(
+                    chunk,
+                    reply_markup=reply_markup,
+                    reply_parameters=reply_parameters,
+                    link_preview_index=link_preview_index,
+                )
+            if msg is None:
+                raise Exception("???")
+            return msg
         return await self.tg.send_message(
             chat_id=self.chat_id,
             text=text,
@@ -135,6 +154,18 @@ class MyTelegram:
         if isinstance(msg, bool):
             logger.error("Invalid message type", msg_type=type(msg))
             raise TypeError(f"{type(msg)=}!")
+        return msg
+
+    async def edit_reply_markup(
+        self,
+        msg_id: int,
+        reply_markup: Any = None,
+    ) -> types.Message:
+        msg = await self.tg.edit_message_reply_markup(
+            chat_id=self.chat_id,
+            message_id=msg_id,
+            reply_markup=reply_markup,
+        )
         return msg
 
     async def edit_pinned_text(

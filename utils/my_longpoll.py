@@ -1,4 +1,4 @@
-from utils.interface.vk_messages import get_last_vk_id
+from utils.interface.vk_interface import get_last_vk_id
 from utils.my_vk_api import AsyncVkApi, AsyncVkLongPoll, VkLongpollMode
 
 # import vk_api.longpoll as longpoll
@@ -16,35 +16,30 @@ WAIT_TIME = 5
 
 
 async def save_longpoll_info(
-    chat_id: int, vk_longpoll: AsyncVkLongPoll, log=True
+    chat_id: int, ts: int | None = None, pts: int | None = None, log=True
 ):
     config = Config(chat_id)
     await config.load_values()
 
-    if vk_longpoll.ts:
-        config._ts = vk_longpoll.ts
+    if ts:
+        config._ts = ts
 
-    if vk_longpoll.pts:
-        config._pts = vk_longpoll.pts
+    if pts:
+        config._pts = pts
 
     await config.save_variables()
 
 
-async def load_longpoll_info(chat_id: int, vk_longpoll: AsyncVkLongPoll):
+async def load_longpoll_info(
+    chat_id: int, default_ts: int | None = None, default_pts: int | None = None
+):
     try:
         config = Config(chat_id)
         await config.load_values()
     except KeyError:
-        ts = 0
-        pts = 0
-    else:
-        ts, pts = config._ts, config._pts
-    if vk_longpoll.ts and ts is not None:
-        vk_longpoll.ts = ts
-    if vk_longpoll.pts and pts is not None:
-        vk_longpoll.pts = pts
+        return default_ts, default_pts
 
-    await vk_longpoll.update_longpoll_server(update_ts=False)
+    return config._ts, config._pts
 
 
 async def get_client_and_longpoll(
