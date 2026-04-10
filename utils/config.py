@@ -29,14 +29,8 @@ OWNER_ID = int(
 )
 
 
-ENTRIES = (
-    "_BOT_TOKEN",
-    "_ADMIN_IDS",
-)
-ENTIRES4FUNCS = Literal[
-    "BOT_TOKEN",
-    "ADMIN_IDS",
-]
+ENTRIES = ("_BOT_TOKEN",)
+ENTIRES4FUNCS = Literal["BOT_TOKEN",]
 
 UNSET = object()
 
@@ -72,8 +66,6 @@ class Config:
     """For telegram bot"""
 
     chat_id: int
-    _ADMIN_IDS: list[int]
-    """User ids, which can use dev commands"""
 
     _ACCESS_TOKEN: str
     """For vkontakte"""
@@ -96,7 +88,6 @@ class Config:
         self.dot_env_file = ".env"
 
         self._BOT_TOKEN = self.get_variable("BOT_TOKEN")
-        self._ADMIN_IDS = self.get_variable("ADMIN_IDS")
         self.chat_id = chat_id
         self._connector = sqlite3.connect(DB_PATH)
 
@@ -122,7 +113,7 @@ class Config:
         return self._ts
 
     def __str__(self):
-        return f"""<Config {self._ADMIN_IDS=}"""
+        return f"""<Config {self.chat_id=}"""
 
     def __repr__(self):
         return f"""utils.classes.Config({["{}={}".format(n, getattr(self, n)) for n in self._entries]})"""
@@ -150,11 +141,9 @@ class Config:
         return self
 
     @overload
-    def get_variable(
-        self, variable_name: Literal["ADMIN_IDS"]
-    ) -> list[int]: ...
-    @overload
     def get_variable(self, variable_name: Literal["BOT_TOKEN"]) -> str: ...
+    @overload
+    def get_variable(self, variable_name: str) -> Any: ...
 
     # @overload
     # def get_variable(self, variable_name: Literal["ACCESS_TOKEN"]) -> str: ...
@@ -172,23 +161,9 @@ class Config:
                     "BOT_TOKEN"
                 )
 
-            case "ADMIN_IDS":
-                if env_admin_ids := os.environ.get("ADMIN_IDS"):
-                    return list(
-                        int(i.strip()) for i in env_admin_ids.split(",")
-                    )
-
-                return self.update_variable("ADMIN_IDS")
-
             case _:
-                raise KeyError(
-                    'Need one of these values: "BOT_TOKEN", "ADMIN_IDS"'
-                )
+                raise KeyError('Need one of these values: "BOT_TOKEN"')
 
-    @overload
-    def update_variable(
-        self, variable_name: Literal["ADMIN_IDS"]
-    ) -> list[int]: ...
     @overload
     def update_variable(self, variable_name: Literal["BOT_TOKEN"]) -> str: ...
 
@@ -202,7 +177,6 @@ class Config:
             str
             | Literal[
                 "BOT_TOKEN",
-                "ADMIN_IDS",
                 "all",
             ]
         ),
@@ -215,18 +189,6 @@ class Config:
                 )
                 dotenv.set_key(dot_env_file, "BOT_TOKEN", self._BOT_TOKEN)
                 return self._BOT_TOKEN
-
-            case "ADMIN_IDS":
-                ADMIN_IDS = ""
-                while not all(
-                    i.strip().isdecimal() for i in ADMIN_IDS.split(",")
-                ):
-                    ADMIN_IDS = input(
-                        "Введите id пользователей-админов в телеграм (https://t.me/my_id_bot в помощь, писать через запятую): "
-                    )
-                self._ADMIN_IDS = [int(i.strip()) for i in ADMIN_IDS.split(",")]
-                dotenv.set_key(dot_env_file, "ADMIN_IDS", str(self._ADMIN_IDS))
-                return self._ADMIN_IDS
 
             case "all":
                 for v in self._entries:
