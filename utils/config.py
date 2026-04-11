@@ -20,10 +20,10 @@ logger = getLogger(__name__)
 T = TypeVar("T")
 _DEFAULT = object()
 OWNER_ID = int(
-    os.environ.get("CHAT_ID")
+    os.environ.get("OWNER_ID")
     or dotenv.set_key(
         ".env",
-        "CHAT_ID",
+        "OWNER_ID",
         input("Введите ваш ID в телеграм (https://t.me/my_id_bot в помощь): "),
     )[2]
 )
@@ -140,10 +140,10 @@ class Config:
         self.set_ts(user_info.ts)
         return self
 
-    @overload
-    def get_variable(self, variable_name: Literal["BOT_TOKEN"]) -> str: ...
-    @overload
-    def get_variable(self, variable_name: str) -> Any: ...
+    # @overload
+    # def get_variable(self, variable_name: Literal["BOT_TOKEN"]) -> str: ...
+    # @overload
+    # def get_variable(self, variable_name: str) -> Any: ...
 
     # @overload
     # def get_variable(self, variable_name: Literal["ACCESS_TOKEN"]) -> str: ...
