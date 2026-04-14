@@ -32,6 +32,6 @@ def get_message_url(thing: Message) -> str:
 
 def _add_handlers(vk_bot: vkbottle.User) -> None:
     vk_bot.on.message()(handlers.new_message)
-    vk_bot.on.raw_event(event=list(str(x) for x in UserEventType), dataclass=RawUserEvent)(
-        handlers.raw_event
-    )
+    vk_bot.on.raw_event(
+        event=list(str(x) for x in UserEventType), dataclass=RawUserEvent
+    )(handlers.raw_event)

@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
-from enum import Enum
-from typing import Any, Protocol, Literal, cast, List, Optional, assert_type
+from typing import cast, List, Optional
 import datetime
 
 from .attachments import Attachment
@@ -38,7 +37,7 @@ class MessageAction(BaseModel):
 
     @property
     def email(self):
-        member_id = self.member_id
+        # member_id = self.member_id
         if self.type == MessageActionType.CHAT_KICK_USER:
             assert isinstance(self.member_id, int), "wtf"
             if self.member_id >= 0:

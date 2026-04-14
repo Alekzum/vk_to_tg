@@ -28,7 +28,10 @@ async def make_bot():
 
 
 def make_dispatcher():
-    dp = Dispatcher(storage=AioSQLStorage(str(pathlib.Path("data", "fsm_storage.db"))), name="VkBottle")
+    dp = Dispatcher(
+        storage=AioSQLStorage(str(pathlib.Path("data", "fsm_storage.db"))),
+        name="VkBottle",
+    )
 
     dp.message.middleware(CooldownMiddleware(1))
     dp.callback_query.middleware(CooldownMiddleware(1))
@@ -37,3 +40,16 @@ def make_dispatcher():
     setup_dialogs(dp)
 
     return dp
+
+
+__all__ = [
+    "config",
+    "my_aiosqlitestore",
+    "my_middlewares",
+    "my_routers",
+    "fsm_states",
+    "my_vk",
+    "get_bot",
+    "make_bot",
+    "make_dispatcher",
+]

@@ -131,7 +131,7 @@ class VKApiMeta[MT = MessageMeta](metaclass=ABCMeta):
         return await get_dialog_name(self, peer_id)
 
 
-class VKApi[MT: vk_api_classes.Message = vk_api_classes.Message](VKApiMeta):
+class VKApi(VKApiMeta):
     def __init__(self, user_id: int) -> None:
         super().__init__(user_id)
         self.cfg = Config(user_id)
@@ -142,26 +142,24 @@ class VKApi[MT: vk_api_classes.Message = vk_api_classes.Message](VKApiMeta):
         self.token = self.cfg._ACCESS_TOKEN
         self.api = AsyncVkApi(token=self.token)
 
-    def _parse_message(self, raw) -> MT:
+    def _parse_message(self, raw) -> vk_api_classes.Message:
         return vk_api_classes.Message.model_validate(raw)  # pyright: ignore[reportReturnType]
 
     async def get_user(self, user_id: int) -> str:
-        chat = (await self.api.method("users.get", dict(user_ids=user_id)))[0]
+        chat = await self.api.method("users.get", dict(user_ids=user_id))
+        logger.debug("got raw user", user=chat)
+        chat = chat[0]
         return " ".join(x for x in (chat["first_name"], chat["last_name"]) if x)
 
     async def get_chat(self, chat_id: int) -> str:
-        chat = (
-            await self.api.method(
-                "messages.getChatPreview", dict(peer_id=chat_id)
-            )
-        )[0]
+        chat = await self.api.method("messages.getChatPreview", dict(peer_id=chat_id))
+        logger.debug("got raw chat", chat=chat)
         return chat["preview"]["title"]
 
     async def get_group(self, group_id: int) -> str:
-        chat = (
-            await self.api.method("groups.getById", dict(group_ids=group_id))
-        )[0]
-        return chat["name"]
+        chat = await self.api.method("groups.getById", dict(group_ids=group_id))
+        logger.debug("got raw group", group=chat)
+        return chat[0]["name"]
 
     async def get_conversation(self, peer_id: int) -> dict[str, Any] | None:
         response = await self.api.method(
@@ -177,20 +175,22 @@ class VKApi[MT: vk_api_classes.Message = vk_api_classes.Message](VKApiMeta):
         return conversation
 
     @overload
-    async def get_message(self, message_ids: int) -> MT: ...
+    async def get_message(self, message_ids: int) -> vk_api_classes.Message: ...
     @overload
-    async def get_message(self, message_ids: Iterable[int]) -> Sequence[MT]: ...
+    async def get_message(
+        self, message_ids: Iterable[int]
+    ) -> Sequence[vk_api_classes.Message]: ...
     async def get_message(
         self, message_ids: int | Iterable[int]
-    ) -> Sequence[MT] | MT:
-        msg_ids = (
+    ) -> Sequence[vk_api_classes.Message] | vk_api_classes.Message:
+        raw_msg_ids = (
             [message_ids] if isinstance(message_ids, int) else list(message_ids)
         )
-        msg_ids = ",".join(str(x) for x in msg_ids.copy())
+        msg_ids = ",".join(str(x) for x in raw_msg_ids.copy())
 
         response = await self.api.method(
             "messages.getById",
-            dict(message_ids=message_ids, extended=1),
+            dict(message_ids=msg_ids, extended=1),
         )
 
         vk_messages = list(self._parse_message(x) for x in response["items"])
@@ -212,7 +212,8 @@ class VKApi[MT: vk_api_classes.Message = vk_api_classes.Message](VKApiMeta):
         )
 
 
-class VKApiBottle(VKApiMeta): ...
+class VKApiBottle(VKApiMeta):
+    pass
 
 
 async def get_dialog_name(api: VKApiMeta[Any], dialog_id: int) -> str:

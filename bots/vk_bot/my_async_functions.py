@@ -26,9 +26,7 @@ class MemoryCache(BaseModel):
     @abstractmethod
     async def get(self, api: VkApiMethod, id: int) -> str: ...
     @abstractmethod
-    async def update_info(
-        self, api: VkApiMethod, id: int
-    ) -> tuple[bool, str]: ...
+    async def update_info(self, api: VkApiMethod, id: int) -> tuple[bool, str]: ...
 
 
 class CacheLambda(MemoryCache):
@@ -51,9 +49,7 @@ class CacheLambda(MemoryCache):
                 id=id,
                 raw_info=raw_info,
             )
-            checked_info = (
-                raw_info[0] if isinstance(raw_info, list) else raw_info
-            )
+            checked_info = raw_info[0] if isinstance(raw_info, list) else raw_info
             info = self.result_parser(checked_info)
             self.update(id=id, name=info, TTL=5)
             return True, info
@@ -90,9 +86,7 @@ class CacheLambda(MemoryCache):
                 )
                 return temp
             except Exception as ex:
-                logger.error(
-                    f"{id=}, {self.api_method=}, {self.api_args(id)=}, {ex=}"
-                )
+                logger.error(f"{id=}, {self.api_method=}, {self.api_args(id)=}, {ex=}")
                 raise ex
         self.update(id=id, name=item.name, TTL=item.TTL - 1)
         return item.name
@@ -115,9 +109,7 @@ class Caches(BaseModel):
                 items=dict(),
                 api_method="users.get",
                 api_args=lambda id: dict(user_ids=id),
-                result_parser=lambda d: " ".join(
-                    [d["first_name"], d["last_name"]]
-                ),
+                result_parser=lambda d: " ".join([d["first_name"], d["last_name"]]),
             ),
             group_cache=CacheLambda(
                 items=dict(),
@@ -216,7 +208,9 @@ async def action_to_string(action: MessageAction, api: VkApiMethod) -> str:
 
     async def chat_invite_user(_action: MessageAction, _api: VkApiMethod):
         assert _action.member_id is not None
-        return f"Приглашен {_action.email or await get_user_name(_api, _action.member_id)}"
+        return (
+            f"Приглашен {_action.email or await get_user_name(_api, _action.member_id)}"
+        )
 
     async def chat_kick_user(_action: MessageAction, _api: VkApiMethod):
         assert _action.member_id is not None
@@ -228,9 +222,7 @@ async def action_to_string(action: MessageAction, api: VkApiMethod) -> str:
     async def chat_unpin_message(_action: MessageAction, _api: VkApiMethod):
         return "Открепил сообщение"
 
-    async def chat_invite_user_by_link(
-        _action: MessageAction, _api: VkApiMethod
-    ):
+    async def chat_invite_user_by_link(_action: MessageAction, _api: VkApiMethod):
         return "Зашёл в беседу по ссылку"
 
     async def default(_action: MessageAction, _api: VkApiMethod):
@@ -283,9 +275,7 @@ def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
         for chunk in iter(raw_chunks.split("&")):
             argument = chunk.split("=")[0]
             if argument in arguments_to_replace:
-                url_result += (
-                    argument + "=" + arguments_to_replace[argument] + "&"
-                )
+                url_result += argument + "=" + arguments_to_replace[argument] + "&"
                 continue
             url_result += chunk + "&"
         return url_result
@@ -332,9 +322,7 @@ def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
             convert_dict = russified_type
 
         russified_type = " ".join(
-            x
-            for i in attachment_type.split(" ")
-            if (x := convert_dict.get(i, i))
+            x for i in attachment_type.split(" ") if (x := convert_dict.get(i, i))
         )
 
         return attachment_url, russified_type
@@ -372,9 +360,7 @@ def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
             market_album=lambda: (
                 f"Название: {media['title']}, id владельца: {media['owner_id']}"
             ),
-            wall_reply=lambda: (
-                f"№{media['id']} от пользователя №{media['owner_id']}"
-            ),
+            wall_reply=lambda: f"№{media['id']} от пользователя №{media['owner_id']}",
             sticker=lambda: media["images"][-1]["url"],
             gift=lambda: media["thumb_256"],
             audio_message=lambda: media["link_mp3"],
@@ -399,11 +385,7 @@ def get_attachment_info(attachment: Attachment) -> tuple[str, str]:
     )
     aliases = {
         "audio-message": lambda: (
-            (
-                r[0]
-                if isinstance(r := translate_dict["audio_message"](), tuple)
-                else r
-            ),
+            (r[0] if isinstance(r := translate_dict["audio_message"](), tuple) else r),
             "audio_message",
         ),
         "gift-item": lambda: (
@@ -477,9 +459,7 @@ async def get_chat_name(api: VkApiMethod, chat_id: int) -> str:
 
 
 @overload
-async def get_dialog_name(
-    api: VkApiMethod, dialog_id: Message | int
-) -> str: ...
+async def get_dialog_name(api: VkApiMethod, dialog_id: Message | int) -> str: ...
 @overload
 async def get_dialog_name(
     api: VkApiMethod, dialog_id: Message | int, dialog_type: None
@@ -527,7 +507,7 @@ async def get_dialog_name(
     return conversation
 
 
-async def get_text_message(
+async def parse_message(
     message: Message, api: VkApiMethod, text_depth: int
 ) -> tuple[str, str]:
     """Return f"[{time}] {msg_data}: {msg_text}" and conversation's title"""
@@ -589,9 +569,7 @@ async def parse_forwarded_messages(
         tmp_list_: list[str] = list()
         attachments = check_attachments(fwd, tmp_list_)
         if (rtm := fwd.reply_message) and text_depth:
-            rtm_str = await parse_replied_message(
-                api, rtm, text_depth=text_depth
-            )
+            rtm_str = await parse_replied_message(api, rtm, text_depth=text_depth)
             attachments.append(
                 f"С ответом на сообщение:<blockquote expandable>{rtm_str.replace(SEP, '\n | ')}</blockquote>"
             )
@@ -615,9 +593,7 @@ async def parse_forwarded_messages(
 
         fwd_list.append(f"{user}: {fwd.text}\n{attachments_str}")
 
-    fwd_string = SEP.join(
-        [("\n" + fwd_).replace("\n", SEP) for fwd_ in fwd_list]
-    )
+    fwd_string = SEP.join([("\n" + fwd_).replace("\n", SEP) for fwd_ in fwd_list])
     return fwd_string
 
 
@@ -627,9 +603,7 @@ async def parse_replied_message(
     text_depth: bool | int = False,
 ) -> str:
     reply_message_normal = Message(
-        **(await api.messages.getById(message_ids=reply_to_message.id))[
-            "items"
-        ][0]
+        **(await api.messages.getById(message_ids=reply_to_message.id))["items"][0]
     )
     rtm = (
         await parse_message(
@@ -654,7 +628,9 @@ async def check_attached_messages(
             reply_to_message,
             text_depth=(1 if text_depth >= 0 else text_depth - 1),
         )
-        rtm_string = f"С ответом на сообщение:<blockquote expandable>{rtm_str}</blockquote>"
+        rtm_string = (
+            f"С ответом на сообщение:<blockquote expandable>{rtm_str}</blockquote>"
+        )
         to_add.append(rtm_string)
 
     if forwarded_messages := message.forwarded_messages:
@@ -663,20 +639,6 @@ async def check_attached_messages(
         )
         forwarded_string = f"С пересланными сообщениями: <blockquote expandable>{fwd_string}</blockquote>"
         to_add.append(forwarded_string)
-
-
-async def parse_message(
-    message: Message,
-    api: VkApiMethod,
-    # text_depth=3,
-    text_depth=-1,
-) -> tuple[str, bool]:
-    """Return output and chat_is_in_blocklist"""
-    msg = (await api.messages.getById(message_ids=message.id))["items"][0]
-    message = Message(**msg)
-    text, conversation = await get_text_message(message, api, text_depth)
-    is_in_blocklist = conversation in CHATS_BLACKLIST
-    return text, is_in_blocklist
 
 
 async def parse_event(
@@ -691,7 +653,7 @@ async def parse_event(
         raise RuntimeError("Didn't found message for event", event)
     msg = msgs[0]
     message = Message.model_validate(msg)
-    text, conversation = await get_text_message(message, api, text_depth)
+    text, conversation = await parse_message(message, api, text_depth)
     is_in_blocklist = conversation in CHATS_BLACKLIST
     return text, is_in_blocklist
 

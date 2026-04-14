@@ -1,0 +1,12 @@
+-- database: e:\Projects\VkontakteToTelegramBot\data\fsm_storage.db
+
+-- Use the ▷ button in the top right corner to run the entire file.
+
+SELECT * FROM fsm_data;
+
+
+DELETE FROM fsm_data WHERE data=x'80047d942e' OR data="test delete";
+
+
+DROP TRIGGER IF EXISTS remove_empty_data;
+CREATE TRIGGER IF NOT EXISTS remove_empty_data AFTER UPDATE ON fsm_data BEGIN DELETE FROM fsm_data WHERE data=x'80047d942e'; END;

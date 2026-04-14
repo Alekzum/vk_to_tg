@@ -18,7 +18,7 @@ from aiogram_dialog.widgets.common import ManagedScroll
 #     # Message as VkMessage,
 #     # get_text_message,
 # )
-from ...vk_bot.my_async_functions import get_dialog_name, get_text_message
+from ...vk_bot.my_async_functions import get_dialog_name, parse_message
 from ...vk_bot.classes import Message as VkMessage
 from ...vk_bot.classes.get_conversations import GetConversations
 from ..utils.my_vk import get_vk_api, VkApiMethod, upload_photo
@@ -42,9 +42,7 @@ async def get_start_data(event: ChatEvent, dialog_manager: DialogManager):
     dialog_manager.dialog_data.update(start_data)
 
 
-async def on_send_message(
-    dialog_manager: DialogManager, **kwargs
-) -> dict[str, str]:
+async def on_send_message(dialog_manager: DialogManager, **kwargs) -> dict[str, str]:
     user = dialog_manager.event.from_user
     if not user:
         logger.error("Didn't found user!")
@@ -66,7 +64,7 @@ async def on_send_message(
 
     rtm = await api.messages.getById(message_ids=reply_message)
     rtm_vk = VkMessage(**rtm["items"][0])
-    message_text = (await get_text_message(rtm_vk, api, 0))[0]
+    message_text = (await parse_message(rtm_vk, api, 0))[0]
     result["msg_message"] = message_text
     return result
 
@@ -108,9 +106,7 @@ async def send_confirm(
     if action == "reply":
         if msg_vk_id is None:
             return await callback.answer("Я не знаю такое сообщение.")
-        raw_msg = (await api.messages.getById(message_ids=msg_vk_id))["items"][
-            0
-        ]
+        raw_msg = (await api.messages.getById(message_ids=msg_vk_id))["items"][0]
         vk_msg = VkMessage(**raw_msg)
 
         send_kwargs.update(
@@ -153,9 +149,7 @@ async def send_confirm(
                 photo_id = await upload_photo(photo=b_io, tg_user_id=tg_user_id)
                 attachments.append(photo_id)
 
-            send_kwargs.update(
-                dict(attachment=",".join(attachments), message=text)
-            )
+            send_kwargs.update(dict(attachment=",".join(attachments), message=text))
 
         case _:
             raise NotImplementedError
@@ -184,9 +178,7 @@ async def on_chat_selected(
     user_id = callback.from_user.id
     # logger.debug("selected chat", user_id=user_id, item_id=item_id)
     chats_list = dialog_manager.dialog_data["vk_chat_list_data"]
-    chats_dict: dict[int, tuple[str, int]] = {
-        p[0]: (p[1], p[2]) for p in chats_list
-    }
+    chats_dict: dict[int, tuple[str, int]] = {p[0]: (p[1], p[2]) for p in chats_list}
     selected_chat = chats_dict[item_id]
     logger.debug(
         "selected chat",
@@ -219,14 +211,12 @@ async def async_parse_chats(
             peer_id = chat.conversation.peer.id
             peer_type = chat.conversation.peer.type
             task = group.create_task(
-                get_dialog_name(
-                    dialog_id=peer_id, api=api, dialog_type=peer_type
-                )
+                get_dialog_name(dialog_id=peer_id, api=api, dialog_type=peer_type)
             )
             task.add_done_callback(
                 (
-                    lambda peer_id_: lambda f: peers_to_find.append(
-                        (f.result(), peer_id_)
+                    lambda peer_id_: (
+                        lambda f: peers_to_find.append((f.result(), peer_id_))
                     )
                 )(peer_id)
             )
@@ -272,7 +262,7 @@ async def parse_chats(
     return chats_list
 
 
-async def on_choose_chat(
+async def on_choose_blacklist(
     dialog_manager: DialogManager, **data
 ) -> dict[str, list[tuple[int, str, int]]]:
     """{"chats": (chat_index, chat_name, chat_peer_id)}"""
@@ -281,9 +271,7 @@ async def on_choose_chat(
         return {"chats": []}
 
     offset = dialog_manager.dialog_data.get("vk_chat_list_offset", 0)
-    raw_chats_: dict = dialog_manager.dialog_data.get(
-        "vk_chat_conversations", {}
-    )
+    raw_chats_: dict = dialog_manager.dialog_data.get("vk_chat_conversations", {})
 
     dialog_manager.dialog_data["vk_chat_conversations"] = raw_chats_
     raw_chats = raw_chats_.get(offset, None)
@@ -304,9 +292,7 @@ async def on_choose_chat(
     chats_list = await async_parse_chats(api, raw_chats, offset)
 
     dialog_manager.dialog_data["vk_chat_list_data"] = chats_list
-    logger.debug(
-        "return chats", user_id=user_id, chats_list_len=len(chats_list)
-    )
+    logger.debug("return chats", user_id=user_id, chats_list_len=len(chats_list))
     return {"chats": chats_list}
 
 
@@ -392,7 +378,7 @@ send_message_dialog = Dialog(
             # state=BotStates.START_POLLING,
         ),
         state=BotStates.Answer.CHOOSE_CHAT,
-        getter=on_choose_chat,
+        getter=on_choose_blacklist,
         preview_add_transitions=[Back()],
     ),
     Window(

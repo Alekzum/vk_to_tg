@@ -1,7 +1,6 @@
 import warnings
 
 from . import (
-    set as dset,
     delete as ddelete,
     set as dset,
     new as dnew,
@@ -9,7 +8,7 @@ from . import (
     values as dvalues,
     search as dsearch,
     merge as dmerge,
-    _DEFAULT_SENTINEL
+    _DEFAULT_SENTINEL,
 )
 from .types import MergeType
 

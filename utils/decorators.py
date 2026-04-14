@@ -40,9 +40,7 @@ x = 0
 def test_repeat():
     def test_lambda():
         return (
-            globals().update(
-                {"x": logger.debug('increment "x"') or globals()["x"] + 1}
-            )
+            globals().update({"x": logger.debug('increment "x"') or globals()["x"] + 1})
             or (globals()["x"] <= 1 and exec("raise Exception('LMAO')"))
             or 1
         )
@@ -65,7 +63,5 @@ def test_repeat():
 if __name__ == "__main__":
     import pathlib
 
-    exec(
-        pathlib.Path().absolute().joinpath("utils", "my_logging.py").read_text()
-    )
+    exec(pathlib.Path().absolute().joinpath("utils", "my_logging.py").read_text())
     test_repeat()

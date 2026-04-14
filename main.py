@@ -27,7 +27,7 @@ async def main():
     wrap_loggers()
     # test()
     sys_args = sys.argv[1:]
-    task: asyncio.Task
+    # task: asyncio.Task
 
     only_telegram = "--telegram" in sys_args
     is_test = "--test" in sys_args

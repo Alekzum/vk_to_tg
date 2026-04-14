@@ -1,3 +1,5 @@
+from typing import NamedTuple
+
 from utils.config import OWNER_ID
 from utils.my_longpoll import (
     get_last_vk_id,
@@ -50,55 +52,58 @@ async def get_old_messages(
     tg_client: MyTelegram,
 ) -> None:
     user_id = tg_client.chat_id
-    config = Config(user_id)
-    await config.load_values()
+    config = await Config.load_user_values(user_id)
 
     max_msg_id = await get_last_vk_id(user_id)
-    result: dict = {"more": 1}
-
     index = 0
-    kwargs = dict(
-        ts=config.ts,
-        pts=config.pts,
-        lp_version=3,
-        credentials=True,
-        max_msg_id=max_msg_id,
-    )
-    while "more" in result and result["more"]:
-        result = await vk_bot.api.request("messages.getLongPollHistory", kwargs)
-        result = result["response"]
+    while True:
+        longpoll_history = await vk_bot.api.messages.get_long_poll_history(
+            ts=config.ts,
+            pts=config.pts,
+            lp_version=3,
+            credentials=True,
+            max_msg_id=max_msg_id,
+            extended=True,
+        )
+        assert longpoll_history.credentials
+        assert longpoll_history.history
+        assert longpoll_history.credentials.pts
+        ts = longpoll_history.credentials.ts
+        pts = longpoll_history.credentials.pts
 
-        # server = result["credentials"]["server"]
-        ts = result["credentials"]["ts"]
-        # key = result["credentials"]["key"]
-        pts = result["new_pts"]
+        msg_ids = [
+            int(event[1])
+            for event in longpoll_history.history
+            if event[0] == 4 or event[0] == 5
+        ]
+        msgs = {
+            msg_id: msg
+            for (msg_id, msg) in zip(
+                msg_ids,
+                (
+                    await vk_bot.api.messages.get_by_id(message_ids=msg_ids)
+                ).items,
+            )
+        }
+        for event in longpoll_history.history:
+            # fake_event = event
+            # if event[0] in {4, 5}:  # new or edited message
+            #     msg = msgs.get(int(event[1]))
+            #     if msg is None:  # we dont found message, skip event 0-o
+            #         continue
 
-        history: list[list] = iter(result["history"].copy())  # lazy iterator
+            #     # add timestamp and text fields
+            #     fake_event = event + [msg.date, msg.text]
+            #     # our fake event is ready for handling :stars:
+            # else:
+            #     event = await vk_bot.polling.get_event(
+            #         longpoll_history.credentials.model_dump()
+            #     )
 
-        for event in history:
-            fake_event = event
-            if event[0] in {4, 5}:  # new or edited message
-                msgs_ = await vk_bot.api.request(
-                    "messages.getById",
-                    dict(message_ids=event[1]),  # get full message
-                )
-                msg_ = msgs_["response"]["items"]
-                if not msg_:  # we dont found message, skip event 0-o
-                    continue
-
-                msg = msg_[0]
-
-                # add timestamp and text fields
-                to_new_event = event + [msg["date"], msg["text"]]
-                fake_event = to_new_event
-                # our fake event is ready for handling :stars:
-
-            event = await vk_bot.polling.get_event(result["credentials"])
-
-            await vk_bot.router.route(event, vk_bot.api)
+            # await vk_bot.router.route(event, vk_bot.api)
 
             if tg_client.chat_id == OWNER_ID:
-                logger.debug(f"getLongPollHistory - {event=}, {fake_event=}")
+                logger.debug(f"getLongPollHistory - {event=}")
             index += 1
             try:
                 await asyncio.sleep(0)
@@ -121,8 +126,18 @@ async def get_old_messages(
         logger.debug(f"{user_id=}, Processed {index} updates")
 
 
+class BotPair(NamedTuple):
+    vk: vkbottle.User
+    tg: MyTelegram
+
+
+async def get_bots(user_id: int) -> BotPair:
+    tuple[vkbottle.User, MyTelegram]
+
+
 async def main(user_id: int):
-    logger.debug(f"{user_id=}, Получение вк клиента и longpoll'а...")
+    logger = getLogger(__name__, user_id=user_id)
+    logger.debug("Получение вк клиента и longpoll'а...")
     config = Config(user_id)
     await config.load_values()
     user_token = config._ACCESS_TOKEN
@@ -132,24 +147,20 @@ async def main(user_id: int):
     vk_bot = vkbottle.User(api=vk_api, polling=vk_polling)
 
     tg_client = MyTelegram(user_id, name="VkBottle2TgBot")
-    logger.debug(f"{user_id=}, Бот стартует...")
+    logger.debug("Бот стартует...")
     await tg_client.init()
 
     if vk_polling.user_id is None:
-        vk_polling.user_id = (await vk_api.request("users.get", {}))[
-            "response"
-        ][0]["id"]
-    server = (
-        await vk_api.request("messages.getLongPollServer", dict(need_pts=1))
-    )["response"]
+        vk_polling.user_id = (await vk_api.users.get())[0].id
 
-    server_ts, server_pts = server["ts"], server["pts"]
-    logger.info(f"{user_id=}, On server: ts={server_ts}, pts={server_pts}")
+    server = await vk_api.messages.get_long_poll_server(need_pts=1)
+    assert server.pts, "need_pts=1 is used, but got pts=None!"
 
-    logger.info(f"{user_id=}, Saved: ts={config.ts}, pts={config.pts}")
-    logger.info(
-        f"{user_id=}, Bot is getting last {server_pts - config.pts} events"
-    )
+    server_ts, server_pts = server.ts, server.pts
+    logger.info("On server", ts=server_ts, pts=server_pts)
+    logger.info("Saved", ts=config.ts, pts=config.pts)
+
+    logger.info("Bot is getting events", event_amount=(server_pts - config.pts))
     await get_old_messages(vk_bot, tg_client)
 
     _add_handlers(vk_bot)

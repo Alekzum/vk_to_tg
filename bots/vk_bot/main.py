@@ -6,7 +6,6 @@ from utils.my_longpoll import (
     save_longpoll_info,
     get_last_vk_id,
 )
-from vk_api.longpoll import VkEventType, Event
 
 from requests.exceptions import ConnectionError, Timeout
 from httpx import NetworkError, TimeoutException, RemoteProtocolError
@@ -18,12 +17,13 @@ from .my_async_functions import get_dialog_name
 from . import handlers
 from .utils import beautify_print
 from ..telegram_bot.classes import MyTelegram
-from utils.interface.user_settings import get_polling_state, set_polling_state
+from utils import my_vk_api as vk_api
+from vk_api.longpoll import VkEventType, Event
+from utils.interface.user_settings import UserSettingsManager
 
 from utils.my_logging import getLogger
 import asyncio
 import traceback
-import vk_api
 from html import escape
 
 from io import BytesIO
@@ -220,9 +220,7 @@ async def get_old_messages(
         for event in history:
             # logger.debug(f"getLongPollHistory - {event=}")
             if event[0] in {4, 5}:
-                msg_ = (await api.messages.getById(message_ids=event[1]))[
-                    "items"
-                ]
+                msg_ = (await api.messages.getById(message_ids=event[1]))["items"]
                 if not msg_:
                     continue
                 msg = msg_[0]
@@ -295,9 +293,7 @@ async def handle(
 
         logger.error(error_str)
         logger.debug(error_str)
-        await send_to_tg(
-            tg_client, error_str + "\n" + escape(f"Событие: {event!r}")
-        )
+        await send_to_tg(tg_client, error_str + "\n" + escape(f"Событие: {event!r}"))
         # logger.error(error_str)
 
     try:
@@ -333,9 +329,7 @@ async def main(user_id: int):
 
     await vk_longpoll.update_longpoll_server(update_pts=True)
     assert vk_longpoll.ts is not None, f"vk_longpoll.ts is None for {user_id=}"
-    assert vk_longpoll.pts is not None, (
-        f"vk_longpoll.pts is None for {user_id=}"
-    )
+    assert vk_longpoll.pts is not None, f"vk_longpoll.pts is None for {user_id=}"
     server_ts, server_pts = vk_longpoll.ts, vk_longpoll.pts
     logger.info("On server", ts=server_ts, pts=server_pts, user_id=user_id)
 
@@ -355,11 +349,13 @@ async def main(user_id: int):
     await get_old_messages(api, vk_longpoll, tg_client)
 
     server_ts, server_pts = vk_longpoll.ts, vk_longpoll.pts
-    await set_polling_state(user_id, True)
+    user_settings = UserSettingsManager(user_id)
+    polling_state = user_settings.polling_state
+    await polling_state.set(True)
     await tg_client.send_text("Бот запущен!")
     logger.info("Бот запущен!", user_id=user_id)
 
-    while await get_polling_state(user_id):
+    while await polling_state.get():
         try:
             index = 0
             events = await vk_longpoll.check()
@@ -394,7 +390,7 @@ async def main(user_id: int):
 
         except KeyboardInterrupt:
             logger.info("set polling state to False")
-            await set_polling_state(user_id, False)
+            await polling_state.set(False)
 
         except TIMEOUT_EXCEPTIONS as ex:
             logger.warning("timeout")
@@ -412,6 +408,7 @@ async def main(user_id: int):
             logger.debug(private_trace, exc_info=True, user_id=user_id)
             await tg_client.send_text(public_trace)
             await send_to_tg(tg_client, text=private_trace, chat_id=OWNER_ID)
+            await asyncio.sleep(5)
 
         try:
             await asyncio.sleep(0)

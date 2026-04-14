@@ -2,7 +2,7 @@ from utils.config import Config
 from utils.my_vk_api import AsyncVkApi, VkApiMethod
 import httpx
 from io import BytesIO
-from .my_typings import get_dialog_name, get_vk_api as new_vk_api
+from .my_typings import get_vk_api as new_vk_api
 
 # from vk_api import vk_api
 from warnings import deprecated
@@ -11,9 +11,7 @@ from warnings import deprecated
 @deprecated("Use bots\\telegram_bot\\utils\\my_typings.py:get_vk_api instead")
 async def get_vk_api(user_id: int) -> VkApiMethod:
 
-    vk_client = AsyncVkApi(
-        token=(await Config(user_id).load_values())._ACCESS_TOKEN
-    )
+    vk_client = AsyncVkApi(token=(await Config(user_id).load_values())._ACCESS_TOKEN)
     api = vk_client.get_api()
     return api
 
@@ -35,9 +33,7 @@ async def upload_photo(tg_user_id: int, photo: str | BytesIO) -> str:
         await httpx.AsyncClient().post(url, files=dict(photo=photo))
     ).json()
 
-    photos = await vk_api.api.get_api().photos.saveMessagesPhoto(
-        **uploaded_photo_info
-    )
+    photos = await vk_api.api.get_api().photos.saveMessagesPhoto(**uploaded_photo_info)
     photo_ = photos[0] if photos else None
     if photo_ is None:
         raise RuntimeError

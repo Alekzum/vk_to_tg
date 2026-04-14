@@ -33,20 +33,13 @@ COMMANDS_DESCRIPTION: dict[str, str] = dict(
 
 HELP_TEXT = formatting.as_marked_section(
     'Доступные команды "разработчика"',
-    *[
-        formatting.as_key_value(f"/{k}", v)
-        for (k, v) in COMMANDS_DESCRIPTION.items()
-    ],
+    *[formatting.as_key_value(f"/{k}", v) for (k, v) in COMMANDS_DESCRIPTION.items()],
 ).as_html()
 
 
 def clear_dict(d: dict | Any, _depth=3) -> dict:
     return (
-        {
-            k: clear_dict(v, _depth - 1)
-            for (k, v) in d.copy().items()
-            if k[0] != "_"
-        }
+        {k: clear_dict(v, _depth - 1) for (k, v) in d.copy().items() if k[0] != "_"}
         if isinstance(d, dict) and _depth >= 1
         else d
     )
@@ -86,10 +79,7 @@ async def cmd_delete_data(
         case "del_key":
             deleted_object = obj.pop(last_object)
             await message.answer(html.escape(f"{deleted_object=}"))
-            logger.debug(
-                "deleted objects",
-                deleted_object=deleted_object
-            )
+            logger.debug("deleted objects", deleted_object=deleted_object)
         case "get_key":
             required_object = obj[last_object]
             await message.answer(
@@ -109,9 +99,7 @@ async def cmd_data(
         return {k: type(v) for (k, v) in d.copy().items()}
 
     required_data: dict[str, dict[Any, Any]] = dict(
-        middleware_data=dict(
-            middleware_data=make_dict(dialog_manager.middleware_data)
-        ),
+        middleware_data=dict(middleware_data=make_dict(dialog_manager.middleware_data)),
         dialog_data=dict(dialog_data=make_dict(dialog_manager.dialog_data)),
         global_data=dict(global_data=make_dict(globals().copy())),
         local_data=dict(local_data=make_dict(locals().copy())),
@@ -122,13 +110,9 @@ async def cmd_data(
     data = required_data[command.command]
     try:
         raw = html.escape(
-            json.dumps(
-                data, indent=4, ensure_ascii=False, sort_keys=True, default=str
-            )
+            json.dumps(data, indent=4, ensure_ascii=False, sort_keys=True, default=str)
         )
-        msgs = [
-            raw[4000 * i : 4000 * (i + 1)] for i in range(0, len(raw) // 2000)
-        ]
+        msgs = [raw[4000 * i : 4000 * (i + 1)] for i in range(0, len(raw) // 2000)]
         [await message.answer(msg) for msg in msgs if msg.strip()]
         # path = await text_to_image(
         #     json.dumps(data, indent=4, ensure_ascii=False, sort_keys=True, default=str)

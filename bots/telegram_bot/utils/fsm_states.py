@@ -18,6 +18,7 @@ class BotStates(StatesGroup):
         LOADING_CHATS = State()
         CHOOSE_CHAT = State()
         MAYBE_CHOOSE_CHAT = State()
+
     MENU = State()
     # SETTINGS = State()
     START_POLLING = State()
@@ -29,5 +30,9 @@ class SettingStates(StatesGroup):
     class Blacklist(StatesGroup):
         SELECT = State()
         CONFIRM = State()
+
+    class ApiKey(StatesGroup):
+        SELECT = State()
+        CONFIRM = State()
+
     MENU = State()
-    

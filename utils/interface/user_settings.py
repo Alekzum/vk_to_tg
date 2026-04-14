@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 from pydantic import BaseModel, Field
 from typing import Iterable, Any, overload, Literal
 import aiosqlite
@@ -46,7 +48,7 @@ async def init_db():
         await con.commit()
 
 
-async def init_user(tg_id: int, vk_token: str):
+async def _init_user(tg_id: int, vk_token: str):
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -72,15 +74,13 @@ def parse_user(raw) -> UserInfo:
 
 
 @overload
-async def get_user[T](tg_id: int, default: T) -> UserInfo | T: ...
+async def _get_user[T](tg_id: int, default: T) -> UserInfo | T: ...
 @overload
-async def get_user(tg_id: int, default: Any = _UNSET) -> UserInfo: ...
-async def get_user[T](tg_id: int, default: T | Any = _UNSET) -> UserInfo | T:
+async def _get_user(tg_id: int, default: Any = _UNSET) -> UserInfo: ...
+async def _get_user[T](tg_id: int, default: T | Any = _UNSET) -> UserInfo | T:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
-        await cur.execute(
-            f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,)
-        )
+        await cur.execute(f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,))
         raw = await cur.fetchone()  # : tuple | None
 
     if raw is None and default is _UNSET:
@@ -92,19 +92,17 @@ async def get_user[T](tg_id: int, default: T | Any = _UNSET) -> UserInfo | T:
     return user
 
 
-async def get_users() -> list[UserInfo]:
+async def _get_users() -> list[UserInfo]:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
-        await cur.execute(
-            f"""SELECT {",".join(USER_KEYS)} FROM {TABLE_NAME}""", ()
-        )
+        await cur.execute(f"""SELECT {",".join(USER_KEYS)} FROM {TABLE_NAME}""", ())
         result_: Any = await cur.fetchall()
     result = list(result_) if result_ is not None else list()
 
     return [parse_user(raw) for raw in result if raw]
 
 
-async def update_user(
+async def _update_user(
     tg_id: int,
     blacklist: str | Iterable[str | int] | None | Any = _UNSET,
     pts: int | None | Any = _UNSET,
@@ -144,7 +142,7 @@ async def update_user(
         await con.commit()
 
 
-async def delete_user(
+async def _delete_user(
     tg_id: int,
 ):
     async with aiosqlite.connect(DB_PATH) as con:
@@ -160,9 +158,7 @@ def _srl_blacklist(items: str | int | Iterable[str | int]) -> bytes:
     if len(str(items)) == 0:
         return b""
     items = [items] if isinstance(items, (str, int)) else items
-    return gzip.compress(
-        _BLACKLIST_SEP.join(str(i) for i in items).encode("utf-8")
-    )
+    return gzip.compress(_BLACKLIST_SEP.join(str(i) for i in items).encode("utf-8"))
 
 
 def _drl_blacklist(item: bytes) -> set[str | int]:
@@ -175,7 +171,7 @@ def _drl_blacklist(item: bytes) -> set[str | int]:
     return tmp
 
 
-async def set_blacklist(tg_id: int, items: Iterable[str | int]) -> None:
+async def _set_blacklist(tg_id: int, items: Iterable[str | int]) -> None:
     item = _srl_blacklist(items)
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
@@ -190,7 +186,7 @@ async def set_blacklist(tg_id: int, items: Iterable[str | int]) -> None:
     return None
 
 
-async def get_blacklist(tg_id: int) -> None | set[str | int]:
+async def _get_blacklist(tg_id: int) -> None | set[str | int]:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -203,7 +199,7 @@ async def get_blacklist(tg_id: int) -> None | set[str | int]:
     return to_return
 
 
-async def get_token(tg_id: int) -> None | str:
+async def _get_token(tg_id: int) -> None | str:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -211,13 +207,25 @@ async def get_token(tg_id: int) -> None | str:
         )
         result = await cur.fetchone()  # : tuple[str] | None
     to_return_ = tuple(result) if result is not None else None
-    to_return: str | None = (
-        to_return_[0] if isinstance(to_return_, tuple) else None
-    )
+    to_return: str | None = to_return_[0] if isinstance(to_return_, tuple) else None
     return to_return
 
 
-async def get_state(tg_id: int) -> None | bool:
+async def _set_token(tg_id: int, vk_token: str) -> None | str:
+    async with aiosqlite.connect(DB_PATH) as con:
+        cur = await con.cursor()
+        await cur.execute(
+            f"""UPDATE {TABLE_NAME} SET vk_token=? WHERE tg_id=?""",
+            (
+                vk_token,
+                tg_id,
+            ),
+        )
+        await con.commit()
+    return None
+
+
+async def _get_state(tg_id: int) -> None | bool:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -232,7 +240,7 @@ async def get_state(tg_id: int) -> None | bool:
     return to_return
 
 
-async def set_state(tg_id: int, polling_state: bool) -> None:
+async def _set_state(tg_id: int, polling_state: bool) -> None:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -246,7 +254,7 @@ async def set_state(tg_id: int, polling_state: bool) -> None:
     return None
 
 
-async def get_longpoll_state(tg_id: int) -> tuple[bool, int, int] | None:
+async def _get_longpoll_state(tg_id: int) -> tuple[bool, int, int] | None:
     """returns (polling_state, pts, ts) or None"""
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
@@ -260,7 +268,7 @@ async def get_longpoll_state(tg_id: int) -> tuple[bool, int, int] | None:
     return to_return
 
 
-async def set_longpoll_state(
+async def _set_longpoll_state(
     tg_id: int, polling_state: bool, pts: int, ts: int
 ) -> None:
     async with aiosqlite.connect(DB_PATH) as con:
@@ -280,7 +288,7 @@ async def set_longpoll_state(
     # return to_return
 
 
-async def get_polling_state(tg_id: int) -> bool | None:
+async def _get_polling_state(tg_id: int) -> bool | None:
     """returns polling_state or None"""
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
@@ -293,7 +301,7 @@ async def get_polling_state(tg_id: int) -> bool | None:
     return to_return
 
 
-async def set_polling_state(tg_id: int, polling_state: bool) -> None:
+async def _set_polling_state(tg_id: int, polling_state: bool) -> None:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -306,24 +314,134 @@ async def set_polling_state(tg_id: int, polling_state: bool) -> None:
         await con.commit()
 
 
+class UserSettingsManager:
+    tg_id: int
+
+    class BaseManager(ABC):
+        parent: "UserSettingsManager"
+
+        def __init__(self, parent: "UserSettingsManager"):
+            self.parent = parent
+
+        @abstractmethod
+        async def get(self) -> ...: ...
+
+    class StateManager(BaseManager):
+        async def get(self):
+            return await _get_state(self.parent.tg_id)
+
+        async def set(self, value: bool):
+            return await _set_state(tg_id=self.parent.tg_id, polling_state=value)
+
+    class LongPollingStateManager(BaseManager):
+        async def get(self):
+            return await _get_longpoll_state(tg_id=self.parent.tg_id)
+
+        async def set(self, value: bool, pts: int, ts: int):
+            return await _set_longpoll_state(
+                tg_id=self.parent.tg_id, polling_state=value, pts=pts, ts=ts
+            )
+
+    class PollingStateManager(StateManager):
+        async def get(self):
+            return await _get_polling_state(tg_id=self.parent.tg_id)
+
+        async def set(self, value: bool):
+            return await _set_polling_state(
+                tg_id=self.parent.tg_id, polling_state=value
+            )
+
+    class TokenManager(BaseManager):
+        async def get(self):
+            return await _get_token(tg_id=self.parent.tg_id)
+
+        async def set(self, vk_token):
+            return await _set_token(tg_id=self.parent.tg_id, vk_token=vk_token)
+
+    class BlacklistManager(BaseManager):
+        async def get(self):
+            return await _get_blacklist(tg_id=self.parent.tg_id)
+
+        async def set(self, items: Iterable[str | int]):
+            return await _set_blacklist(tg_id=self.parent.tg_id, items=items)
+
+    class UserManager(BaseManager):
+        async def get(self, tg_id: int | Any = _UNSET):
+            if tg_id is _UNSET:
+                return await _get_user(tg_id=self.parent.tg_id)
+            elif isinstance(tg_id, int):
+                return await _get_user(tg_id=tg_id)
+            raise TypeError(
+                f"Excepted ID or unset for tg_id, got {type(tg_id)}!",
+                type(tg_id),
+            )
+
+        @staticmethod
+        async def get_all():
+            return await _get_users()
+
+        async def set(
+            self,
+            blacklist: str | Iterable[str | int] | Any | None = _UNSET,
+            pts: int | Any | None = _UNSET,
+            ts: int | Any | None = _UNSET,
+            pinned_message_id: int | Any | None = _UNSET,
+        ):
+            return await _update_user(
+                tg_id=self.parent.tg_id,
+                blacklist=blacklist,
+                pinned_message_id=pinned_message_id,
+                pts=pts,
+                ts=ts,
+            )
+
+        async def delete(self):
+            return await _delete_user(tg_id=self.parent.tg_id)
+
+        async def create(self, vk_token: str):
+            return await _init_user(tg_id=self.parent.tg_id, vk_token=vk_token)
+
+    user: UserManager
+    blacklist: BlacklistManager
+    token: TokenManager
+    state: StateManager
+    longpoll_state: LongPollingStateManager
+    polling_state: PollingStateManager
+
+    def __init__(self, tg_id: int):
+        self.tg_id = tg_id
+        self.user = UserSettingsManager.UserManager(self)
+        self.blacklist = UserSettingsManager.BlacklistManager(self)
+        self.token = UserSettingsManager.TokenManager(self)
+        self.state = UserSettingsManager.StateManager(self)
+        self.longpoll_state = UserSettingsManager.LongPollingStateManager(self)
+        self.polling_state = UserSettingsManager.PollingStateManager(self)
+
+
 async def test():
     uid = -100
     test_vk_token = ""
     blacklist_item1 = "something"
     BLACKLIST2 = ""
-    usr = await get_user(tg_id=uid, default=None)
+    manager = UserSettingsManager(uid)
+    user_manager = manager.user
+
+    usr = await _get_user(tg_id=uid, default=None)
     if usr is None:
-        await init_user(tg_id=uid, vk_token=test_vk_token)
+        await user_manager.create(vk_token=test_vk_token)
     else:
         print(f"! {usr=}")
-    await update_user(tg_id=uid, blacklist=blacklist_item1)
-    usr = await get_user(tg_id=uid)
+    await user_manager.set(blacklist=blacklist_item1)
+
+    usr = await user_manager.get()
     assert blacklist_item1 in usr.blacklist, f"{usr.blacklist=}"
-    await update_user(tg_id=uid, blacklist=BLACKLIST2)
-    usr = await get_user(tg_id=uid)
+    await user_manager.set(blacklist=BLACKLIST2)
+
+    usr = await user_manager.get()
     assert len(usr.blacklist) == 0, f"{usr.blacklist=}"
-    await delete_user(tg_id=uid)
-    usr = await get_user(tg_id=uid, default=None)
+    await user_manager.delete()
+
+    usr = await _get_user(tg_id=uid, default=None)
     assert usr is None, f"{usr=}"
 
 
@@ -331,3 +449,5 @@ NOTSET = object()
 
 if __name__ == "__main__":
     asyncio.run(test())
+
+__all__ = ["UserSettingsManager", "init_db"]

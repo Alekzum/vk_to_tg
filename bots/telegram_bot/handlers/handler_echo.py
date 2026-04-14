@@ -8,9 +8,7 @@ from aiogram_dialog.widgets.input import MessageInput
 
 from aiogram_dialog.api.exceptions import NoContextError
 from ..utils.fsm_states import BotStates, EchoStates
-import structlog
 from utils.my_logging import getLogger
-import logging
 
 
 logger = getLogger(__name__)

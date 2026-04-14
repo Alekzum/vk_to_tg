@@ -1,7 +1,5 @@
-from pydantic import BaseModel, Field
-from enum import Enum
-from typing import Any, Protocol, Literal, cast, List, Optional
-import datetime
+from pydantic import BaseModel
+from typing import Literal, List, Optional
 
 
 class Peer(BaseModel):
@@ -114,5 +112,3 @@ class Conversation(BaseModel):
     style: Optional[str] = None
     sort_id: Optional[SortId] = None
     current_keyboard: Optional[CurrentKeyboard] = None
-
-

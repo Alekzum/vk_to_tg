@@ -9,7 +9,7 @@ from functools import wraps
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar, overload
 from utils.my_logging import getLogger
-from .interface.user_settings import DB_PATH, get_user, update_user
+from .interface.user_settings import DB_PATH, UserSettingsManager
 
 dotenv.load_dotenv(".env")
 CHATS_BLACKLIST: list[str] = ['🚖🚕Такси "Ладья"🚕🚖']
@@ -37,7 +37,6 @@ UNSET = object()
 
 def wrap_loaded_checker(self: "Config"):
     def check():
-        nonlocal self
         if not self._is_loaded:
             raise RuntimeError(
                 f"Need to {type(self).__name__}.load_values() before using this function!"
@@ -83,15 +82,16 @@ class Config:
 
     max_msg_id: int = 0
 
-    def __init__(self, chat_id: int):
+    def __init__(self, tg_id: int):
         self._entries = ENTRIES
         self.dot_env_file = ".env"
 
         self._BOT_TOKEN = self.get_variable("BOT_TOKEN")
-        self.chat_id = chat_id
+        self.chat_id = tg_id
         self._connector = sqlite3.connect(DB_PATH)
 
         self._is_loaded = False
+        self.manager = UserSettingsManager(tg_id)
         # self.load_values()
 
     def __post_init__(self):
@@ -122,16 +122,20 @@ class Config:
         self._connector.close()
 
     async def save_variables(self):
-        await update_user(
-            tg_id=self.chat_id,
+        await self.manager.user.set(
             blacklist=self.blacklist,
-            pts=self._pts,
-            ts=self._ts,
+            pts=self.pts,
+            ts=self.ts,
             pinned_message_id=self.pinned_message_id,
         )
 
+    @classmethod
+    async def load_user_values(cls, user_id: int):
+        self = cls(user_id)
+        return await self.load_values()
+
     async def load_values(self):
-        user_info = await get_user(self.chat_id)
+        user_info = await self.manager.user.get()
         self.polling_state = user_info.polling_state
         self.blacklist = user_info.blacklist
         self._ACCESS_TOKEN = user_info.vk_token
@@ -151,15 +155,11 @@ class Config:
     # def get_variable(self, variable_name: Literal["NEED_UPDATE"]) -> bool: ...
     def get_variable(self: "Config", variable_name: ENTIRES4FUNCS):
         if not isinstance(variable_name, str) and isinstance(self, Config):
-            raise TypeError(
-                f"Variable name must be str, not {type(variable_name)}!"
-            )
+            raise TypeError(f"Variable name must be str, not {type(variable_name)}!")
 
         match variable_name:
             case "BOT_TOKEN":
-                return os.environ.get("BOT_TOKEN") or self.update_variable(
-                    "BOT_TOKEN"
-                )
+                return os.environ.get("BOT_TOKEN") or self.update_variable("BOT_TOKEN")
 
             case _:
                 raise KeyError('Need one of these values: "BOT_TOKEN"')
@@ -171,6 +171,7 @@ class Config:
     def update_variable(self, variable_name: Literal["all"]) -> None: ...
     @overload
     def update_variable(self, variable_name: str) -> Any: ...
+
     def update_variable(
         self,
         variable_name: (

@@ -26,9 +26,7 @@ class MyTelegram:
     tg: Client
     pinned_message_id: int = -1
 
-    def __init__(
-        self, chat_id: int = OWNER_ID, name="PyrogramVkontakteToTelegramBot"
-    ):
+    def __init__(self, chat_id: int = OWNER_ID, name="PyrogramVkontakteToTelegramBot"):
         self.config = cfg = Config(chat_id)
 
         self.chat_id = chat_id
@@ -65,9 +63,7 @@ class MyTelegram:
     @overload
     async def get_messages(self, message_ids: int) -> types.Message: ...
     @overload
-    async def get_messages(
-        self, message_ids: list[int]
-    ) -> list[types.Message]: ...
+    async def get_messages(self, message_ids: list[int]) -> list[types.Message]: ...
     async def get_messages(
         self, message_ids: int | list[int]
     ) -> types.Message | list[types.Message]:
@@ -97,9 +93,7 @@ class MyTelegram:
         entities = len(parsed["entities"] or [])
         m = 4000
         if message > m or entities > 50:
-            chunks = (
-                text[x * m : ((x + 1) * m)] for x in range(len(text) // m)
-            )
+            chunks = (text[x * m : ((x + 1) * m)] for x in range(len(text) // m))
             msg = None
             for chunk in chunks:
                 msg = await self.send_text(
@@ -202,9 +196,7 @@ class MyTelegram:
         await msg.pin(both_sides=True, disable_notification=True)
         self.config.pinned_message_id = self.pinned_message_id = msg.id
         await self.config.save_variables()
-        logger.debug(
-            "saved config for pinned_message_id", pinned_message_id=msg.id
-        )
+        logger.debug("saved config for pinned_message_id", pinned_message_id=msg.id)
         return msg
 
     async def stop(self):

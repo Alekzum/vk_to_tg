@@ -44,7 +44,7 @@ class AioSQLStorage(BaseStorage):
         if self._ser_m != "pickle" and self._ser_m != "json":
             logger.warning(
                 "Unknown serializing method! A 'pickle' will be used.",
-                serializing_method=serializing_method
+                serializing_method=serializing_method,
             )
             self._ser_m = "pickle"
 
@@ -110,9 +110,7 @@ class AioSQLStorage(BaseStorage):
 
         async with aiosqlite.connect(self._db_path) as con:
             cursor = await con.cursor()
-            await cursor.execute(
-                "SELECT state FROM fsm_data WHERE key = ?", (s_key,)
-            )
+            await cursor.execute("SELECT state FROM fsm_data WHERE key = ?", (s_key,))
             s_state = await cursor.fetchone()
 
         if s_state and len(s_state) > 0:
@@ -149,9 +147,7 @@ class AioSQLStorage(BaseStorage):
 
         async with aiosqlite.connect(self._db_path) as con:
             cursor = await con.cursor()
-            await cursor.execute(
-                "SELECT data FROM fsm_data WHERE key = ?", (s_key,)
-            )
+            await cursor.execute("SELECT data FROM fsm_data WHERE key = ?", (s_key,))
             s_data = await cursor.fetchone()
         if s_data is None:
             return {}

@@ -10,7 +10,7 @@ INPUT_DATA_NAME = [
     "callback",
     "callback_data",
     "switch_inline_query",
-    "switch_inline_query_current_chat"
+    "switch_inline_query_current_chat",
 ]
 
 INPUT_KEYS = (
@@ -19,7 +19,7 @@ INPUT_KEYS = (
         "callback",
         "callback_data",
         "switch_inline_query",
-        "switch_inline_query_current_chat"
+        "switch_inline_query_current_chat",
     ]
     | str
 )

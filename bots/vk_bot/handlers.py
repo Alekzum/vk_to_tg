@@ -3,7 +3,6 @@
 # from utils.interface.vk_messages import get_tg_id, add_pair
 
 from ..telegram_bot.classes import MyTelegram
-from .classes import Message as VkMessage
 from pyrogram.types import Message
 from pyrogram import errors as pyro_errors
 from utils.my_vk_api import VkApiMethod
@@ -141,9 +140,7 @@ async def edit_message(
         return
 
     if msg.text is None:
-        raise ValueError(
-            f"Didn't found text at message with id {msg.id}; {msg=}"
-        )
+        raise ValueError(f"Didn't found text at message with id {msg.id}; {msg=}")
 
     await tg_client.edit_text(
         tg_id, (msg.text.markdown + "\n" + string) if append else string
@@ -176,12 +173,14 @@ async def send_to_chat(
         if peer_id and vk_msg_id:
             markup = make_button(
                 "Прочитать",
-                READ_FORMATTER.format(
-                    peer_id=peer_id, msg_id=vk_msg_id
-                ),
+                READ_FORMATTER.format(peer_id=peer_id, msg_id=vk_msg_id),
             )
         else:
-            logger.warning("didn't get items for button", peer_id=peer_id, vk_msg_id=vk_msg_id)
+            logger.warning(
+                "didn't get items for button",
+                peer_id=peer_id,
+                vk_msg_id=vk_msg_id,
+            )
     elif read_button_data:
         markup = make_button(
             "Прочитать",
@@ -193,15 +192,13 @@ async def send_to_chat(
     url_idx = find_first_message_media_url_index(string)
     logger.debug("maybe found url index", url_idx=url_idx)
 
-    if vk_msg_id and (
-        tg_id := await get_tg_id(chat_id, vk_msg_id)
-    ):
+    if vk_msg_id and (tg_id := await get_tg_id(chat_id, vk_msg_id)):
         text_info = await tg_client.tg.parser.parse(string)
         old_msg = await tg_client.get_messages(int(tg_id))
         if old_msg.text == text_info["message"]:
             logger.debug("double message! skip")
             return old_msg
-        
+
         msg = await tg_client.reply_text(
             msg_id=int(tg_id),
             text=string,
@@ -311,9 +308,7 @@ async def on_real_all_outgoing_messages(
 async def on_read_all_incoming_messages(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ) -> None:
-    logger = getLogger(
-        __name__ + ".on_read_incoming", chat_id=tg_client.chat_id
-    )
+    logger = getLogger(__name__ + ".on_read_incoming", chat_id=tg_client.chat_id)
     chat_peer_id = getattr(event, "peer_id")
     chat = await get_dialog_name(api, chat_peer_id)
     string = f"Read all incoming messages in chat {chat}"
@@ -332,9 +327,7 @@ async def on_read_all_incoming_messages(
         )
 
         # somehow get first message with button
-        unread_messages = await vk_interface.get_unread_messages(
-            tg_client.chat_id
-        )
+        unread_messages = await vk_interface.get_unread_messages(tg_client.chat_id)
         # messages = await vk_messages.get_last_vk_id(
         #     tg_client.chat_id, as_generator=True
         # )
@@ -411,9 +404,7 @@ async def on_message_react(
     await send_to_chat(event, tg_client, string)
 
 
-async def on_user_typing(
-    event: Event, api: VkApiMethod, tg_client: MyTelegram
-) -> None:
+async def on_user_typing(event: Event, api: VkApiMethod, tg_client: MyTelegram) -> None:
     user_id = getattr(
         event, "user_id", getattr(event, "from_user", getattr(event, "peer_id"))
     )
@@ -474,9 +465,7 @@ def string_flags(flags: set[VkMessageFlag]):
 async def on_message_flag_interacted(
     event: Event, api: VkApiMethod, tg_client: MyTelegram
 ) -> None:
-    assert event.message_id, (
-        "wtf - event with message's flag, but message_id is none"
-    )
+    assert event.message_id, "wtf - event with message's flag, but message_id is none"
     # logger.debug(f"{beautify_print(event, need_to_print=False, indent=None)}")
 
     # chat_id = tg_client.CHAT_ID
@@ -521,9 +510,7 @@ async def on_message_flag_interacted(
     await send_to_chat(event, tg_client, string, save=False)
 
 
-async def on_other_event(
-    event: Event, api: VkApiMethod, tg_client: MyTelegram
-) -> None:
+async def on_other_event(event: Event, api: VkApiMethod, tg_client: MyTelegram) -> None:
     from_id = (
         await get_user_name(api, uid)
         if not isinstance(uid := getattr(event, "from_id", None), bool)
@@ -623,9 +610,7 @@ def flags_to_human(
     removed_flags: set[VkMessageFlag], current_flags: Literal[None]
 ) -> list[str]: ...
 @overload
-def flags_to_human(
-    removed_flags: None = None, current_flags: None = None
-) -> None: ...
+def flags_to_human(removed_flags: None = None, current_flags: None = None) -> None: ...
 def flags_to_human(
     removed_flags: Optional[set[VkMessageFlag]] = None,
     current_flags: Optional[set[VkMessageFlag]] = None,

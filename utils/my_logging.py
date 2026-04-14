@@ -14,16 +14,8 @@ LOG_DIR = "logs"
 LOG_FILE = "log.log"
 
 
-IS_DEBUG = int(
-    sys.argv[1:]
-    and "--debug" in sys.argv[1:]
-    or dotenv.get_key(".env", "IS_DEBUG")
-)
-IS_LOUD = int(
-    sys.argv[1:]
-    and "--loud" in sys.argv[1:]
-    or dotenv.get_key(".env", "IS_LOUD")
-)
+IS_DEBUG = int("--debug" in sys.argv[1:] or dotenv.get_key(".env", "IS_DEBUG"))
+IS_LOUD = int("--loud" in sys.argv[1:] or dotenv.get_key(".env", "IS_LOUD"))
 
 LEVEL_INFO = logging.DEBUG if IS_DEBUG else logging.INFO
 LEVEL_WARNING = logging.DEBUG if IS_DEBUG else logging.WARNING
@@ -64,7 +56,7 @@ def my_callsite_processor(
         if include_funcname:
             array.append(func_n)
         if inclide_lineno:
-            array.append(line_n)
+            array.append(str(line_n))
         args = tuple(array)
         event_dict["modline"] = "|" + ":".join(str(i) for i in args)
         return event_dict
@@ -153,7 +145,12 @@ root_logger = structlog.wrap_logger(root_logger)
 
 logger = structlog.get_logger(__name__)
 
-logger.info("Logging module loaded", custom_level=LEVEL, is_debug=IS_DEBUG, is_loud=IS_LOUD)
+logger.info(
+    "Logging module loaded",
+    custom_level=LEVEL,
+    is_debug=IS_DEBUG,
+    is_loud=IS_LOUD,
+)
 
 MUTEDICT = {
     "utils": logging.DEBUG,

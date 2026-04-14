@@ -1,6 +1,15 @@
 from copy import deepcopy
 from fnmatch import fnmatchcase
-from typing import Sequence, Tuple, Iterator, Any, Union, Optional, MutableMapping, MutableSequence
+from typing import (
+    Sequence,
+    Tuple,
+    Iterator,
+    Any,
+    Union,
+    Optional,
+    MutableMapping,
+    MutableSequence,
+)
 
 from . import options
 from .exceptions import InvalidGlob, InvalidKeyName, PathNotFound
@@ -70,10 +79,16 @@ def walk(obj, location=()):
             except TypeError:
                 pass
 
-            if length is not None and length == 0 and not options.ALLOW_EMPTY_STRING_KEYS:
-                raise InvalidKeyName("Empty string keys not allowed without "
-                                     "dpath.options.ALLOW_EMPTY_STRING_KEYS=True: "
-                                     f"{location + (k,)}")
+            if (
+                length is not None
+                and length == 0
+                and not options.ALLOW_EMPTY_STRING_KEYS
+            ):
+                raise InvalidKeyName(
+                    "Empty string keys not allowed without "
+                    "dpath.options.ALLOW_EMPTY_STRING_KEYS=True: "
+                    f"{location + (k,)}"
+                )
             yield (location + (k,)), v
 
         for k, v in make_walkable(obj):
@@ -92,7 +107,11 @@ def get(obj, segments: Path):
         if leaf(current):
             raise PathNotFound(f"Path: {segments}[{i}]")
 
-        if isinstance(current, Sequence) and isinstance(segment, str) and segment.isdecimal():
+        if (
+            isinstance(current, Sequence)
+            and isinstance(segment, str)
+            and segment.isdecimal()
+        ):
             segment = int(segment)
 
         current = current[segment]
@@ -108,7 +127,7 @@ def has(obj, segments):
     try:
         get(obj, segments)
         return True
-    except:
+    except Exception:
         return False
 
 
@@ -163,6 +182,7 @@ class Star(object):
     Used to create a global STAR symbol for tracking stars added when
     expanding star-star globs.
     """
+
     pass
 
 
@@ -197,12 +217,14 @@ def match(segments: Path, glob: Glob):
     # The star-star normalized glob ('**' has been removed).
     ss_glob = glob
 
-    if '**' in glob:
+    if "**" in glob:
         # Index of the star-star in the glob.
-        ss = glob.index('**')
+        ss = glob.index("**")
 
-        if '**' in glob[ss + 1:]:
-            raise InvalidGlob(f"Invalid glob. Only one '**' is permitted per glob: {glob}")
+        if "**" in glob[ss + 1 :]:
+            raise InvalidGlob(
+                f"Invalid glob. Only one '**' is permitted per glob: {glob}"
+            )
 
         # Convert '**' segment into multiple '*' segments such that the
         # lengths of the path and glob match. '**' also can collapse and
@@ -211,11 +233,11 @@ def match(segments: Path, glob: Glob):
             # Path and glob have the same number of stars or the glob
             # needs more stars (which we add).
             more_stars = (STAR,) * (path_len - glob_len + 1)
-            ss_glob = glob[:ss] + more_stars + glob[ss + 1:]
+            ss_glob = glob[:ss] + more_stars + glob[ss + 1 :]
         elif path_len == glob_len - 1:
             # Glob has one more segment than the path. Here we remove
             # the '**' segment altogether to match the lengths up.
-            ss_glob = glob[:ss] + glob[ss + 1:]
+            ss_glob = glob[:ss] + glob[ss + 1 :]
 
     # If we were successful in matching up the lengths, then we can
     # compare them using fnmatch.
@@ -226,16 +248,16 @@ def match(segments: Path, glob: Glob):
             # segment itself.
             if g is STAR:
                 if isinstance(s, bytes):
-                    g = b'*'
+                    g = b"*"
                 else:
-                    g = '*'
+                    g = "*"
 
             try:
                 # If search path segment (s) is an int then assume currently evaluated index (g) might be a sequence
                 # index as well. Try converting it to an int.
                 if isinstance(s, int) and s == int(g):
                     continue
-            except:
+            except Exception:
                 # Will reach this point if g can't be converted to an int (e.g. when g is a RegEx pattern).
                 # In this case convert s to a str so fnmatch can work on it.
                 s = str(s)
@@ -246,7 +268,7 @@ def match(segments: Path, glob: Glob):
                 # match.
                 if not fnmatchcase(s, g):
                     return False
-            except:
+            except Exception:
                 return False
 
         # All of the segments matched so we have a complete match.
@@ -283,10 +305,10 @@ def extend(thing: MutableSequence, index: int, value=None):
 
 
 def _default_creator(
-        current: Union[MutableMapping, Sequence],
-        segments: Sequence[PathSegment],
-        i: int,
-        hints: Sequence[Tuple[PathSegment, type]] = ()
+    current: Union[MutableMapping, Sequence],
+    segments: Sequence[PathSegment],
+    i: int,
+    hints: Sequence[Tuple[PathSegment, type]] = (),
 ):
     """
     Create missing path components. If the segment is an int, then it will
@@ -314,18 +336,20 @@ def _default_creator(
         else:
             segment_next = None
 
-        if isinstance(segment_next, int) or (isinstance(segment_next, str) and segment_next.isdecimal()):
+        if isinstance(segment_next, int) or (
+            isinstance(segment_next, str) and segment_next.isdecimal()
+        ):
             current[segment] = []
         else:
             current[segment] = {}
 
 
 def set(
-        obj: MutableMapping,
-        segments: Sequence[PathSegment],
-        value,
-        creator: Optional[Creator] = _default_creator,
-        hints: Hints = ()
+    obj: MutableMapping,
+    segments: Sequence[PathSegment],
+    value,
+    creator: Optional[Creator] = _default_creator,
+    hints: Hints = (),
 ) -> MutableMapping:
     """
     Set the value in obj at the place indicated by segments. If creator is not
@@ -339,10 +363,13 @@ def set(
 
     # For everything except the last value, walk down the path and
     # create if creator is set.
-    for (i, segment) in enumerate(segments[:-1]):
-
+    for i, segment in enumerate(segments[:-1]):
         # If segment is non-int but supposed to be a sequence index
-        if isinstance(segment, str) and isinstance(current, Sequence) and segment.isdecimal():
+        if (
+            isinstance(segment, str)
+            and isinstance(current, Sequence)
+            and segment.isdecimal()
+        ):
             segment = int(segment)
 
         try:
@@ -351,7 +378,7 @@ def set(
             # Unfortunately, for our use, 'x in thing' for lists checks
             # values, not keys whereas dicts check keys.
             current[segment]
-        except:
+        except Exception:
             if creator is not None:
                 creator(current, segments, i, hints)
             else:
@@ -364,7 +391,11 @@ def set(
     last_segment = segments[-1]
 
     # Resolve ambiguity of last segment
-    if isinstance(last_segment, str) and isinstance(current, Sequence) and last_segment.isdecimal():
+    if (
+        isinstance(last_segment, str)
+        and isinstance(current, Sequence)
+        and last_segment.isdecimal()
+    ):
         last_segment = int(last_segment)
 
     if isinstance(last_segment, int):
@@ -424,6 +455,11 @@ def view(obj: MutableMapping, glob: Glob):
         (segments, value) = pair
         if match(segments, glob):
             if not has(result, segments):
-                set(result, segments, deepcopy(value), hints=types(obj, segments))
+                set(
+                    result,
+                    segments,
+                    deepcopy(value),
+                    hints=types(obj, segments),
+                )
 
     return fold(obj, f, type(obj)())

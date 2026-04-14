@@ -27,7 +27,7 @@ translations: dict[str, Translation] = dict(
         error_too_fast="Too fast, wait just {remain_time:.1f} {unit_string}",
     ),
 )
-"""Get translation_table by language code. 
+"""Get translation_table by language code.
 
 In that table there is two fields: seconds_to_str and error_too_fast.
 
@@ -85,9 +85,7 @@ class CooldownMiddleware(BaseMiddleware):
 
             too_fast_message = too_fast_message_raw.format(
                 remain_time=remain_time,
-                unit_string=unit_string.get(
-                    remains_last_d, unit_string["default"]
-                ),
+                unit_string=unit_string.get(remains_last_d, unit_string["default"]),
             )
             await event.answer(too_fast_message)
             return

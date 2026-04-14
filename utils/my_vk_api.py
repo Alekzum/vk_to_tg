@@ -8,6 +8,7 @@
 
 import json
 import random
+from typing import Any
 from utils.my_logging import getLogger
 import re
 import time
@@ -44,9 +45,7 @@ RE_TOKEN_URL = re.compile(r'location\.href = "(.*?)"\+addr;')
 RE_PHONE_PREFIX = re.compile(r'label ta_r">\+(.*?)<')
 RE_PHONE_POSTFIX = re.compile(r'phone_postfix">.*?(\d+).*?<')
 
-DEFAULT_USERAGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"
-)
+DEFAULT_USERAGENT = "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"
 
 DEFAULT_USER_SCOPE = sum(VkUserPermissions)
 
@@ -146,8 +145,7 @@ class AsyncVkApi(object):
 
         self.error_handlers = {
             exceptions.NEED_VALIDATION_CODE: self.need_validation_handler,
-            exceptions.CAPTCHA_ERROR_CODE: captcha_handler
-            or self.captcha_handler,
+            exceptions.CAPTCHA_ERROR_CODE: captcha_handler or self.captcha_handler,
             exceptions.TOO_MANY_RPS_CODE: self.too_many_rps_handler,
             exceptions.TWOFACTOR_CODE: auth_handler or self.auth_handler,
         }
@@ -193,9 +191,7 @@ class AsyncVkApi(object):
 
         self.logger.info("Auth with login: {}".format(self.login))
 
-        set_cookies_from_list(
-            self.http.cookies, self.storage.setdefault("cookies", [])
-        )
+        set_cookies_from_list(self.http.cookies, self.storage.setdefault("cookies", []))
 
         self.token = (
             self.storage.setdefault("token", {})
@@ -218,10 +214,8 @@ class AsyncVkApi(object):
             await self._api_login()
             return
 
-        if not self.check_sid():
-            self.logger.info(
-                "remixsid from config is not valid: {}".format(self._sid)
-            )
+        if not await self.check_sid():
+            self.logger.info("remixsid from config is not valid: {}".format(self._sid))
 
             await self._vk_login()
         else:
@@ -244,7 +238,7 @@ class AsyncVkApi(object):
         if reauth:
             self.logger.info("Auth (API) forced")
 
-        if self.check_sid():
+        if await self.check_sid():
             await self._pass_security_check()
             await self._api_login()
 
@@ -273,9 +267,7 @@ class AsyncVkApi(object):
         response = await self.http.get("https://vk.com/login")
 
         if str(response.url).startswith("https://vk.com/429.html?"):
-            hash429_md5 = md5(
-                self.http.cookies["hash429"].encode("ascii")
-            ).hexdigest()
+            hash429_md5 = md5(self.http.cookies["hash429"].encode("ascii")).hexdigest()
             self.http.cookies.pop("hash429")
             response = await self.http.get(f"{response.url}&key={hash429_md5}")
 
@@ -391,9 +383,7 @@ class AsyncVkApi(object):
         elif status == "2":
             raise exceptions.TwoFactorError("Recaptcha required")
 
-        raise exceptions.TwoFactorError(
-            get_unknown_exc_str("2FA; unknown status")
-        )
+        raise exceptions.TwoFactorError(get_unknown_exc_str("2FA; unknown status"))
 
     async def _pass_security_check(self, response=None):
         """Функция для обхода проверки безопасности (запрос номера телефона)
@@ -429,9 +419,7 @@ class AsyncVkApi(object):
                 "to": "",
             }
 
-            response = await self.http.post(
-                "https://vk.com/login.php", params=values
-            )
+            response = await self.http.post("https://vk.com/login.php", params=values)
 
             if response.text.split("<!>")[4] == "4":
                 return response
@@ -540,9 +528,7 @@ class AsyncVkApi(object):
         }
 
         response = (
-            await self.http.post(
-                "https://oauth.vk.com/access_token", params=values
-            )
+            await self.http.post("https://oauth.vk.com/access_token", params=values)
         ).json()
 
         if "error" in response:
@@ -561,9 +547,7 @@ class AsyncVkApi(object):
         }
 
         response = (
-            await self.http.post(
-                "https://oauth.vk.com/access_token", params=values
-            )
+            await self.http.post("https://oauth.vk.com/access_token", params=values)
         ).json()
 
         if "error" in response:
@@ -701,9 +685,7 @@ class AsyncVkApi(object):
             raise error
 
         if "error" in response:
-            error = exceptions.ApiError(
-                self, method, values, raw, response["error"]
-            )
+            error = exceptions.ApiError(self, method, values, raw, response["error"])
 
             if error.code in self.error_handlers:
                 if error.code == exceptions.CAPTCHA_ERROR_CODE:
@@ -808,17 +790,17 @@ class AsyncVkLongPoll(object):
         preload_messages=False,
         group_id=None,
     ):
-        self.vk = vk
-        self.wait = wait
-        self.mode = mode.value if isinstance(mode, VkLongpollMode) else mode
-        self.preload_messages = preload_messages
+        self.vk: AsyncVkApi = vk
+        self.wait: int = wait
+        self.mode: int = mode.value if isinstance(mode, VkLongpollMode) else mode
+        self.preload_messages: bool = preload_messages
         self.group_id = group_id
 
-        self.url = None
-        self.key = None
+        self.url: Any = None
+        self.key: Any = None
         self.server: str | None = None
-        self.ts = None
-        self.pts = mode & VkLongpollMode.GET_PTS
+        self.ts: Any = None
+        self.pts: Any = None
 
         self.session = httpx.AsyncClient(timeout=30)
 
@@ -831,9 +813,7 @@ class AsyncVkLongPoll(object):
         if self.group_id:
             values["group_id"] = self.group_id
 
-        response: dict = await self.vk.method(
-            "messages.getLongPollServer", values
-        )
+        response: dict = await self.vk.method("messages.getLongPollServer", values)
 
         self.key = response["key"]
         self.server = response["server"]
@@ -871,7 +851,7 @@ class AsyncVkLongPoll(object):
 
         if "failed" not in response:
             self.ts = response["ts"]
-            if self.pts:
+            if self.mode & VkLongpollMode.GET_PTS:
                 self.pts = response["pts"]
 
             events: list[Event] = []

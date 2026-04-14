@@ -1,7 +1,5 @@
 from aiogram import Router
-import structlog
 from utils.my_logging import getLogger
-import logging
 
 
 logger = getLogger(__name__)
@@ -14,6 +12,7 @@ def get_rt():
     from .handler_vk import rt as vk_rt
     from .handler_vk_send import rt as vk_send_rt
     from .handler_settings import rt as settings_rt
+
     rt = Router(name=__name__)
 
     rt.include_routers(

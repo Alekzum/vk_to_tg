@@ -29,9 +29,7 @@ def wrap_loggers():
         try:
             wrap_loggers_module(pair[0], *pair[1:])
         except Exception:
-            logger.warning(
-                "Didn't wrapped module", module_name=pair[0], exc_info=True
-            )
+            logger.warning("Didn't wrapped module", module_name=pair[0], exc_info=True)
 
 
 def wrap_loggers_module(

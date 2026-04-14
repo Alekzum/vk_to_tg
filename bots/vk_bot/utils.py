@@ -23,9 +23,7 @@ URL_RE = re.compile(
 )
 
 
-def beautify_print(
-    obj: Event | Any, indent: int | None = 4, need_to_print=True
-) -> str:
+def beautify_print(obj: Event | Any, indent: int | None = 4, need_to_print=True) -> str:
     string = json.dumps(
         obj,
         indent=indent,

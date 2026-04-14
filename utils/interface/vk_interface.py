@@ -108,9 +108,7 @@ async def get_unread_messages(tg_chat_id: int) -> Generator[MyPair]:
     return gen
 
 
-async def get_message_by_vk_id(
-    tg_chat_id: int, vk_msg_id: int
-) -> MyPair | None:
+async def get_message_by_vk_id(tg_chat_id: int, vk_msg_id: int) -> MyPair | None:
     async with aiosqlite.connect(_DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
@@ -144,9 +142,7 @@ async def get_last_vk_id(tg_chat_id: int) -> None | int:
         )
         result = await cur.fetchone()
     to_return_ = tuple(result) if result is not None else None
-    to_return: int | None = (
-        to_return_[0] if isinstance(to_return_, tuple) else None
-    )
+    to_return: int | None = to_return_[0] if isinstance(to_return_, tuple) else None
     return to_return
 
 

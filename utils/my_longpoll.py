@@ -12,7 +12,7 @@ from requests.exceptions import ConnectionError, Timeout
 # MY_CONFIG = MyConfig(OWNER_ID)
 logger = getLogger(__name__)
 TIMEOUT_EXCEPTIONS = (Timeout, ConnectionError)
-WAIT_TIME = 5
+WAIT_TIME = 10
 
 
 async def save_longpoll_info(
@@ -45,6 +45,7 @@ async def load_longpoll_info(
 async def get_client_and_longpoll(
     chat_id: int,
 ) -> tuple[AsyncVkApi, AsyncVkLongPoll]:
+    logger = getLogger(__name__, chat_id=chat_id)
     config = Config(chat_id)
     await config.load_values()
     token = config._ACCESS_TOKEN

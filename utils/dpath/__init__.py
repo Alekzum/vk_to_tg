@@ -33,7 +33,9 @@ from .types import MergeType, PathSegment, Creator, Filter, Glob, Path, Hints
 _DEFAULT_SENTINEL = object()
 
 
-def _split_path(path: Path, separator: Optional[str] = "/") -> Union[List[PathSegment], PathSegment]:
+def _split_path(
+    path: Path, separator: Optional[str] = "/"
+) -> Union[List[PathSegment], PathSegment]:
     """
     Given a path and separator, return a tuple of segments. If path is
     already a non-leaf thing, return it.
@@ -51,7 +53,13 @@ def _split_path(path: Path, separator: Optional[str] = "/") -> Union[List[PathSe
     return split_segments
 
 
-def new(obj: MutableMapping, path: Path, value, separator="/", creator: Creator | None = None) -> MutableMapping:
+def new(
+    obj: MutableMapping,
+    path: Path,
+    value,
+    separator="/",
+    creator: Creator | None = None,
+) -> MutableMapping:
     """
     Set the element at the terminus of path to value, and create
     it if it does not exist (as opposed to 'set' that can only
@@ -71,7 +79,12 @@ def new(obj: MutableMapping, path: Path, value, separator="/", creator: Creator 
     return segments.set(obj, split_segments, value)
 
 
-def delete(obj: MutableMapping, glob: Glob, separator="/", afilter: Filter | None = None) -> int:
+def delete(
+    obj: MutableMapping,
+    glob: Glob,
+    separator="/",
+    afilter: Filter | None = None,
+) -> int:
     """
     Given a obj, delete all elements that match the glob.
 
@@ -130,7 +143,13 @@ def delete(obj: MutableMapping, glob: Glob, separator="/", afilter: Filter | Non
     return deleted
 
 
-def set(obj: MutableMapping, glob: Glob, value, separator="/", afilter: Filter | None = None) -> int:
+def set(
+    obj: MutableMapping,
+    glob: Glob,
+    value,
+    separator="/",
+    afilter: Filter | None = None,
+) -> int:
     """
     Given a path glob, set all existing elements in the document
     to the given value. Returns the number of elements changed.
@@ -156,10 +175,10 @@ def set(obj: MutableMapping, glob: Glob, value, separator="/", afilter: Filter |
 
 
 def get(
-        obj: MutableMapping,
-        glob: Glob,
-        separator="/",
-        default: Any = _DEFAULT_SENTINEL
+    obj: MutableMapping,
+    glob: Glob,
+    separator="/",
+    default: Any = _DEFAULT_SENTINEL,
 ) -> Union[MutableMapping, object, Callable]:
     """
     Given an object which contains only one possible match for the given glob,
@@ -196,7 +215,13 @@ def get(
     return results[0]
 
 
-def values(obj: MutableMapping, glob: Glob, separator="/", afilter: Filter | None = None, dirs=True):
+def values(
+    obj: MutableMapping,
+    glob: Glob,
+    separator="/",
+    afilter: Filter | None = None,
+    dirs=True,
+):
     """
     Given an object and a path glob, return an array of all values which match
     the glob. The arguments to this function are identical to those of search().
@@ -206,7 +231,14 @@ def values(obj: MutableMapping, glob: Glob, separator="/", afilter: Filter | Non
     return [v for p, v in search(obj, glob, yielded, separator, afilter, dirs)]
 
 
-def search(obj: MutableMapping, glob: Glob, yielded=False, separator="/", afilter: Filter | None = None, dirs=True):
+def search(
+    obj: MutableMapping,
+    glob: Glob,
+    yielded=False,
+    separator="/",
+    afilter: Filter | None = None,
+    dirs=True,
+):
     """
     Given a path glob, return a dictionary containing all keys
     that matched the given glob.
@@ -232,6 +264,7 @@ def search(obj: MutableMapping, glob: Glob, yielded=False, separator="/", afilte
         return (matched and not afilter) or (matched and selected)
 
     if yielded:
+
         def yielder():
             for path, found in segments.walk(obj):
                 if keeper(path, found):
@@ -239,6 +272,7 @@ def search(obj: MutableMapping, glob: Glob, yielded=False, separator="/", afilte
 
         return yielder()
     else:
+
         def f(obj, pair, result):
             (path, found) = pair
 
@@ -249,11 +283,11 @@ def search(obj: MutableMapping, glob: Glob, yielded=False, separator="/", afilte
 
 
 def merge(
-        dst: MutableMapping,
-        src: MutableMapping,
-        separator="/",
-        afilter: Filter | None = None,
-        flags=MergeType.ADDITIVE
+    dst: MutableMapping,
+    src: MutableMapping,
+    separator="/",
+    afilter: Filter | None = None,
+    flags=MergeType.ADDITIVE,
 ):
     """
     Merge source into destination. Like dict.update() but performs deep
@@ -285,7 +319,7 @@ def merge(
 
     flags is an OR'ed combination of MergeType enum members.
     """
-    filtered_src = search(src, '**', afilter=afilter, separator='/')
+    filtered_src = search(src, "**", afilter=afilter, separator="/")
 
     def are_both_mutable(o1, o2):
         mapP = isinstance(o1, MutableMapping) and isinstance(o2, MutableMapping)
@@ -302,9 +336,11 @@ def merge(
             current_path = _segments + (key,)
 
             if len(key) == 0 and not options.ALLOW_EMPTY_STRING_KEYS:
-                raise InvalidKeyName("Empty string keys not allowed without "
-                                     "dpath.options.ALLOW_EMPTY_STRING_KEYS=True: "
-                                     f"{current_path}")
+                raise InvalidKeyName(
+                    "Empty string keys not allowed without "
+                    "dpath.options.ALLOW_EMPTY_STRING_KEYS=True: "
+                    f"{current_path}"
+                )
 
             # Validate src and dst types match.
             if flags & MergeType.TYPESAFE:
@@ -314,7 +350,9 @@ def merge(
                     ft = type(found)
                     if tt != ft:
                         path = separator.join(current_path)
-                        raise TypeError(f"Cannot merge objects of type {tt} and {ft} at {path}")
+                        raise TypeError(
+                            f"Cannot merge objects of type {tt} and {ft} at {path}"
+                        )
 
             # Path not present in destination, create it.
             if not segments.has(dst, current_path):

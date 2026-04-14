@@ -6,7 +6,7 @@
 
 # def include_routers(dp: Dispatcher, root_str="handlers"):
 #     setup_dialogs(dp)
-    
+
 #     root = pathlib.Path(root_str)
 #     root_str = root.as_posix().replace("/", ".")
 #     files = root.glob("*.py")

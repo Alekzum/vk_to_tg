@@ -4,9 +4,7 @@ from vkbottle.user import Message
 import json
 
 
-def beautify_print(
-    obj: object, indent: int | None = 4, need_to_print=True
-) -> str:
+def beautify_print(obj: object, indent: int | None = 4, need_to_print=True) -> str:
     string = json.dumps(
         obj,
         indent=indent,

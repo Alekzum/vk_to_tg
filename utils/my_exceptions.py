@@ -46,9 +46,7 @@ def create_task_helper(coroutine, **kwargs):
 def handle_exception(ex: Exception):
     def format_key(k):
         return (
-            str(k)
-            if not (k is None or isinstance(k, (str, int, float, bool)))
-            else k
+            str(k) if not (k is None or isinstance(k, (str, int, float, bool))) else k
         )
 
     def limit_string(obj):
@@ -56,20 +54,14 @@ def handle_exception(ex: Exception):
 
     def format_dict(d):
         return (
-            {
-                format_key(k): format_dict(v)
-                for (k, v) in d.items()
-                if str(k)[0] != "_"
-            }
+            {format_key(k): format_dict(v) for (k, v) in d.items() if str(k)[0] != "_"}
             if isinstance(d, dict)
             else limit_string(d)
         )
 
     trace = ex.__traceback__
     indent = 4
-    kwargs: dict[str, Any] = dict(
-        default=str, ensure_ascii=False, indent=indent
-    )
+    kwargs: dict[str, Any] = dict(default=str, ensure_ascii=False, indent=indent)
     for tb, line in traceback.walk_tb(trace):
         if (
             any(i in tb.f_code.co_filename for i in IGNORE_FILES)
@@ -89,6 +81,4 @@ def handle_exception(ex: Exception):
 
         # print(f"{type(tb.f_globals)=}, {type(tb.f_locals)=}")
         # print(f"{type(globals_)=}, {type(locals_)=}")
-        print(
-            f"""at {tb.f_code.co_filename}, line {line} namespace is: {info}"""
-        )
+        print(f"""at {tb.f_code.co_filename}, line {line} namespace is: {info}""")
