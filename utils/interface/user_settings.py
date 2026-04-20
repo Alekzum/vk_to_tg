@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 from pydantic import BaseModel, Field
 from typing import Iterable, Any, overload, Literal
+from utils.crypt import decrypt_string, encrypt_string
 import aiosqlite
 import asyncio
 
@@ -80,7 +81,9 @@ async def _get_user(tg_id: int, default: Any = _UNSET) -> UserInfo: ...
 async def _get_user[T](tg_id: int, default: T | Any = _UNSET) -> UserInfo | T:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
-        await cur.execute(f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,))
+        await cur.execute(
+            f"""SELECT * FROM {TABLE_NAME} WHERE tg_id=?""", (tg_id,)
+        )
         raw = await cur.fetchone()  # : tuple | None
 
     if raw is None and default is _UNSET:
@@ -95,7 +98,9 @@ async def _get_user[T](tg_id: int, default: T | Any = _UNSET) -> UserInfo | T:
 async def _get_users() -> list[UserInfo]:
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
-        await cur.execute(f"""SELECT {",".join(USER_KEYS)} FROM {TABLE_NAME}""", ())
+        await cur.execute(
+            f"""SELECT {",".join(USER_KEYS)} FROM {TABLE_NAME}""", ()
+        )
         result_: Any = await cur.fetchall()
     result = list(result_) if result_ is not None else list()
 
@@ -158,7 +163,9 @@ def _srl_blacklist(items: str | int | Iterable[str | int]) -> bytes:
     if len(str(items)) == 0:
         return b""
     items = [items] if isinstance(items, (str, int)) else items
-    return gzip.compress(_BLACKLIST_SEP.join(str(i) for i in items).encode("utf-8"))
+    return gzip.compress(
+        _BLACKLIST_SEP.join(str(i) for i in items).encode("utf-8")
+    )
 
 
 def _drl_blacklist(item: bytes) -> set[str | int]:
@@ -207,17 +214,21 @@ async def _get_token(tg_id: int) -> None | str:
         )
         result = await cur.fetchone()  # : tuple[str] | None
     to_return_ = tuple(result) if result is not None else None
-    to_return: str | None = to_return_[0] if isinstance(to_return_, tuple) else None
-    return to_return
+    to_return: str | None = (
+        to_return_[0] if isinstance(to_return_, tuple) else None
+    )
+    token = decrypt_string(to_return or "")
+    return token
 
 
 async def _set_token(tg_id: int, vk_token: str) -> None | str:
+    token = encrypt_string(vk_token)
     async with aiosqlite.connect(DB_PATH) as con:
         cur = await con.cursor()
         await cur.execute(
             f"""UPDATE {TABLE_NAME} SET vk_token=? WHERE tg_id=?""",
             (
-                vk_token,
+                token,
                 tg_id,
             ),
         )
@@ -324,14 +335,17 @@ class UserSettingsManager:
             self.parent = parent
 
         @abstractmethod
-        async def get(self) -> ...: ...
+        async def get(self) -> Any:
+            pass
 
     class StateManager(BaseManager):
         async def get(self):
             return await _get_state(self.parent.tg_id)
 
         async def set(self, value: bool):
-            return await _set_state(tg_id=self.parent.tg_id, polling_state=value)
+            return await _set_state(
+                tg_id=self.parent.tg_id, polling_state=value
+            )
 
     class LongPollingStateManager(BaseManager):
         async def get(self):
