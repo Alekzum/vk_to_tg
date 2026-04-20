@@ -29,6 +29,7 @@ def helper_done_callback(task):
             # report the exception
             ex_str = traceback.format_exc()
             logger.error(f"{ex}! {ex_str}")
+            raise ex
     except asyncio.exceptions.CancelledError:
         pass
 

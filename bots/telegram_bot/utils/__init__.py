@@ -21,13 +21,23 @@ async def get_bot() -> tuple[Bot, Dispatcher]:
 
 
 async def make_bot():
-    return Bot(
+    # bot_ = getattr(make_bot, "result", None)
+    # if bot_ is not None:
+    #     return bot_
+
+    bot = Bot(
         token=(await Config(OWNER_ID).load_values())._BOT_TOKEN,
         default=DefaultBotProperties(parse_mode="html"),
     )
+    # setattr(make_bot, "result", bot)
+    return bot
 
 
 def make_dispatcher():
+    # dp_ = getattr(make_dispatcher, "result", None)
+    # if dp_ is not None:
+    #     return dp_
+
     dp = Dispatcher(
         storage=AioSQLStorage(str(pathlib.Path("data", "fsm_storage.db"))),
         name="VkBottle",
@@ -37,8 +47,10 @@ def make_dispatcher():
     dp.callback_query.middleware(CooldownMiddleware(1))
     dp.include_router(get_rt())
     # include_routers(dp)
-    setup_dialogs(dp)
+    dialog_bg_factory = setup_dialogs(dp)
+    dp["dialog_bg_factory"] = dialog_bg_factory
 
+    # setattr(make_dispatcher, "result", dp)
     return dp
 
 

@@ -1,17 +1,17 @@
 from aiogram.fsm.state import State, StatesGroup
 
 
-class CommonStates(StatesGroup):
+class TGCommonStates(StatesGroup):
     START = State()
     MENU = State()
 
 
-class EchoStates(StatesGroup):
+class TGEchoStates(StatesGroup):
     MENU = State()
     ECHO = State()
 
 
-class BotStates(StatesGroup):
+class VKBotStates(StatesGroup):
     class Answer(StatesGroup):
         SEND_MESSAGE = State()
         ADD_MEDIA = State()
@@ -19,14 +19,14 @@ class BotStates(StatesGroup):
         CHOOSE_CHAT = State()
         MAYBE_CHOOSE_CHAT = State()
 
-    MENU = State()
+    BEFORE_POLLING = State()
     # SETTINGS = State()
-    START_POLLING = State()
+    POLLING = State()
     # ANSWER = State()
     # CHOOSE_CHAT = State()
 
 
-class SettingStates(StatesGroup):
+class TGSettingStates(StatesGroup):
     class Blacklist(StatesGroup):
         SELECT = State()
         CONFIRM = State()

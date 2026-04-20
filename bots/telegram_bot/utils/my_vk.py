@@ -2,7 +2,7 @@ from utils.config import Config
 from utils.my_vk_api import AsyncVkApi, VkApiMethod
 import httpx
 from io import BytesIO
-from .my_typings import get_vk_api as new_vk_api
+from .my_vk_classes import get_vk_api as new_vk_api
 
 # from vk_api import vk_api
 from warnings import deprecated

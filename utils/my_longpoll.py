@@ -72,7 +72,9 @@ async def get_client_and_longpoll(
             raise
         except Exception as ex:
             logger.warning(f"No longpoll: {ex}", exc_info=True)
-            await asyncio.sleep(WAIT_TIME)
+            raise ex
+            # await asyncio.sleep(WAIT_TIME)
+            break
         else:
             break
 

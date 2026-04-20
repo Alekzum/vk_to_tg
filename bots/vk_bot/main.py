@@ -1,3 +1,5 @@
+import html
+
 from utils.config import OWNER_ID
 from utils.my_vk_api import VkApiMethod, AsyncVkLongPoll
 from utils.my_longpoll import (
@@ -312,13 +314,19 @@ async def handle(
 
 async def main(user_id: int):
     logger.debug("Получение вк клиента и longpoll'а...", user_id=user_id)
-    # vk_client = await get_vk_api(user_id)
-    vk_client, vk_longpoll = await get_client_and_longpoll(user_id)
-    api = vk_client.get_api()
 
     tg_client = MyTelegram(user_id, "VkAPI2TgBot")
-    logger.debug("Бот стартует...", user_id=user_id)
+    logger.debug("ТГ бот стартует...", user_id=user_id)
     await tg_client.init()
+
+    # vk_client = await get_vk_api(user_id)
+    try:
+        vk_client, vk_longpoll = await get_client_and_longpoll(user_id)
+    except ValueError as ex:
+        await tg_client.send_text(f"Не удалось начать получение сообщений из-за ошибки: {html.escape(str(ex))}")
+        raise
+    
+    api = vk_client.get_api()
 
     ts, pts = await load_longpoll_info(
         user_id, default_ts=vk_longpoll.ts, default_pts=vk_longpoll.pts

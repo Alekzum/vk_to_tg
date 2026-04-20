@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.kbd import Next, Back, Row, Cancel
 from aiogram_dialog.widgets.input import MessageInput
 
 from aiogram_dialog.api.exceptions import NoContextError
-from ..utils.fsm_states import BotStates, EchoStates
+from ..utils.fsm_states import VKBotStates, TGEchoStates
 from utils.my_logging import getLogger
 
 
@@ -35,13 +35,13 @@ common_dialog = Dialog(
             Cancel(Const("No")),
             Next(Const("ok")),
         ),
-        state=EchoStates.MENU,
+        state=TGEchoStates.MENU,
     ),
     Window(
         Const("Now write. I will wait..."),
         MessageInput(echo_action),
         Back(Const("I changed my mind")),
-        state=EchoStates.ECHO,
+        state=TGEchoStates.ECHO,
     ),
 )
 
@@ -52,7 +52,7 @@ async def cmd_start(_: Message, dialog_manager: DialogManager):
         dialog_manager.current_context()
     except NoContextError:
         await dialog_manager.start(
-            BotStates.MENU,
+            VKBotStates.BEFORE_POLLING,
             mode=StartMode.NEW_STACK,
             show_mode=ShowMode.AUTO,
         )

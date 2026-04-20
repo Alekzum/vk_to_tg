@@ -13,9 +13,19 @@ getLogger = get_logger = structlog.stdlib.get_logger
 LOG_DIR = "logs"
 LOG_FILE = "log.log"
 
+if "--debug" in sys.argv[1:]:
+    IS_DEBUG = True
+elif dotenv.get_key(".env", "IS_DEBUG") is None:
+    IS_DEBUG = False
+else:
+    IS_DEBUG = int(dotenv.get_key(".env", "IS_DEBUG"))
 
-IS_DEBUG = int("--debug" in sys.argv[1:] or dotenv.get_key(".env", "IS_DEBUG"))
-IS_LOUD = int("--loud" in sys.argv[1:] or dotenv.get_key(".env", "IS_LOUD"))
+if "--loud" in sys.argv[1:]:
+    IS_LOUD = True
+elif dotenv.get_key(".env", "IS_LOUD") is None:
+    IS_LOUD = False
+else:
+    IS_LOUD = int(dotenv.get_key(".env", "IS_LOUD"))
 
 LEVEL_INFO = logging.DEBUG if IS_DEBUG else logging.INFO
 LEVEL_WARNING = logging.DEBUG if IS_DEBUG else logging.WARNING

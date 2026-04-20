@@ -1,3 +1,5 @@
+from functools import partial
+
 from utils.config import Config, OWNER_ID
 from utils.my_logging import getLogger
 from os import environ as ENVIRON
@@ -26,7 +28,9 @@ class MyTelegram:
     tg: Client
     pinned_message_id: int = -1
 
-    def __init__(self, chat_id: int = OWNER_ID, name="PyrogramVkontakteToTelegramBot"):
+    def __init__(
+        self, chat_id: int = OWNER_ID, name="PyrogramVkontakteToTelegramBot"
+    ):
         self.config = cfg = Config(chat_id)
 
         self.chat_id = chat_id
@@ -63,7 +67,9 @@ class MyTelegram:
     @overload
     async def get_messages(self, message_ids: int) -> types.Message: ...
     @overload
-    async def get_messages(self, message_ids: list[int]) -> list[types.Message]: ...
+    async def get_messages(
+        self, message_ids: list[int]
+    ) -> list[types.Message]: ...
     async def get_messages(
         self, message_ids: int | list[int]
     ) -> types.Message | list[types.Message]:
@@ -84,7 +90,11 @@ class MyTelegram:
     async def send_text(
         self,
         text: str,
-        reply_markup: Any = None,
+        reply_markup: types.InlineKeyboardMarkup
+        | types.ReplyKeyboardMarkup
+        | types.ReplyKeyboardRemove
+        | types.ForceReply
+        | None = None,
         reply_parameters: types.ReplyParameters | Any = None,
         link_preview_index: int = 0,
     ) -> types.Message:
@@ -93,7 +103,9 @@ class MyTelegram:
         entities = len(parsed["entities"] or [])
         m = 4000
         if message > m or entities > 50:
-            chunks = (text[x * m : ((x + 1) * m)] for x in range(len(text) // m))
+            chunks = (
+                text[x * m : ((x + 1) * m)] for x in range(len(text) // m)
+            )
             msg = None
             for chunk in chunks:
                 msg = await self.send_text(
@@ -105,15 +117,21 @@ class MyTelegram:
             if msg is None:
                 raise Exception("???")
             return msg
-        return await self.tg.send_message(
+
+        func = partial(
+            self.tg.send_message,
             chat_id=self.chat_id,
             text=text,
-            reply_markup=reply_markup,
             reply_parameters=reply_parameters,
             link_preview_options=types.LinkPreviewOptions(
                 url=find_url(text, index=link_preview_index)
             ),
         )
+        if reply_markup:
+            return await func(
+                reply_markup=reply_markup,
+            )
+        return await func()
 
     async def reply_text(
         self,
@@ -196,7 +214,9 @@ class MyTelegram:
         await msg.pin(both_sides=True, disable_notification=True)
         self.config.pinned_message_id = self.pinned_message_id = msg.id
         await self.config.save_variables()
-        logger.debug("saved config for pinned_message_id", pinned_message_id=msg.id)
+        logger.debug(
+            "saved config for pinned_message_id", pinned_message_id=msg.id
+        )
         return msg
 
     async def stop(self):
